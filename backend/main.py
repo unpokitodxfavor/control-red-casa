@@ -40,6 +40,7 @@ from database import (
 from scanner import scan_network_arp, resolve_hostname, get_vendor_from_mac
 from websocket_manager import manager as ws_manager
 from metrics_worker import MetricsCollector, auto_create_ping_sensors
+from alerts import AlertManager, AlertLevel, AlertChannel, AlertCondition
 
 # Setup Logging
 logging.basicConfig(
@@ -57,6 +58,32 @@ MDNS_NAME_CACHE = {}
 
 # Metrics collector instance
 metrics_collector = None
+
+# Alert manager instance
+alert_manager = None
+
+# Alert configuration
+ALERT_CONFIG = {
+    'email': {
+        'enabled': False,  # Cambiar a True y configurar para usar
+        'smtp_server': 'smtp.gmail.com',
+        'smtp_port': 587,
+        'smtp_user': 'tu-email@gmail.com',
+        'smtp_password': 'tu-password-o-app-password',
+        'from_email': 'alerts@control-red-casa.com',
+        'to_email': 'admin@ejemplo.com'
+    },
+    'telegram': {
+        'enabled': False,  # Cambiar a True y configurar para usar
+        'bot_token': 'YOUR_BOT_TOKEN_HERE',
+        'chat_id': 'YOUR_CHAT_ID_HERE'
+    },
+    'webhook': {
+        'enabled': False,
+        'url': 'https://ejemplo.com/webhook',
+        'headers': {}
+    }
+}
 
 class MDNSListener:
     def remove_service(self, zeroconf, type, name):
@@ -212,13 +239,28 @@ def background_scanner():
                     new_alert = Alert(
                         device_id=new_dev.id, 
                         type="NEW_DEVICE",
+                        condition="new_device",
                         level="INFO",
-                        message=alert_msg
+                        message=alert_msg,
+                        device_name=hostname or 'Desconocido',
+                        device_ip=d['ip']
                     )
                     db.add(new_alert)
                     db.commit()
                     
                     send_notification("Nuevo Dispositivo", alert_msg)
+                    
+                    # Disparar alerta con AlertManager
+                    if alert_manager:
+                        device_dict = {
+                            'id': new_dev.id,
+                            'ip': d['ip'],
+                            'hostname': hostname,
+                            'alias': new_dev.alias,
+                            'status': 'Online',
+                            'is_authorized': new_dev.is_authorized
+                        }
+                        alert_manager.process_device_event('new', device_dict)
                     
                     # Broadcast via WebSocket
                     asyncio.run(ws_manager.broadcast_device_update({
@@ -242,11 +284,26 @@ def background_scanner():
                         new_alert = Alert(
                             device_id=device.id,
                             type="REAPPEARED",
+                            condition="device_online",
                             level="INFO",
-                            message=alert_msg
+                            message=alert_msg,
+                            device_name=device.hostname or device.ip,
+                            device_ip=d['ip']
                         )
                         db.add(new_alert)
                         send_notification("Dispositivo en Red", alert_msg)
+                        
+                        # Disparar alerta con AlertManager
+                        if alert_manager:
+                            device_dict = {
+                                'id': device.id,
+                                'ip': d['ip'],
+                                'hostname': device.hostname,
+                                'alias': device.alias,
+                                'status': 'Online',
+                                'is_authorized': device.is_authorized
+                            }
+                            alert_manager.process_device_event('online', device_dict)
                     
                     if not device.hostname or device.hostname == "Unknown" or device.hostname == "":
                          m_name = MDNS_NAME_CACHE.get(d['ip'])
@@ -281,11 +338,26 @@ def background_scanner():
                 new_alert = Alert(
                     device_id=dev.id,
                     type="OFFLINE",
+                    condition="device_offline",
                     level="WARNING",
-                    message=alert_msg
+                    message=alert_msg,
+                    device_name=dev.hostname or dev.ip,
+                    device_ip=dev.ip
                 )
                 db.add(new_alert)
                 send_notification("Dispositivo Offline", alert_msg)
+                
+                # Disparar alerta con AlertManager
+                if alert_manager:
+                    device_dict = {
+                        'id': dev.id,
+                        'ip': dev.ip,
+                        'hostname': dev.hostname,
+                        'alias': dev.alias,
+                        'status': 'Offline',
+                        'is_authorized': dev.is_authorized
+                    }
+                    alert_manager.process_device_event('offline', device_dict)
             
             db.commit()
             
@@ -306,7 +378,7 @@ def background_scanner():
 
 @app.on_event("startup")
 async def startup_event():
-    global metrics_collector
+    global metrics_collector, alert_manager
     
     init_db()
     start_mdns_listener()
@@ -315,8 +387,15 @@ async def startup_event():
         logger.warning("!!! LA APLICACION NO ESTA CORRIENDO COMO ADMINISTRADOR !!!")
         logger.warning("El escaneo ARP de Scapy probablemente fallará.")
     
-    # Auto-crear sensores de ping
-    auto_create_ping_sensors()
+    # Auto-crear sensores de ping en background
+    # (Lo ejecutamos en un hilo aparte para que no bloquee el inicio de la API)
+    threading.Thread(target=auto_create_ping_sensors, daemon=True).start()
+    
+    # Initialize Alert Manager
+    db = SessionLocal()
+    alert_manager = AlertManager(db, ALERT_CONFIG)
+    alert_manager.load_rules()
+    logger.info("✅ Alert Manager initialized")
     
     # Start scanning thread
     thread = threading.Thread(target=background_scanner, daemon=True)
@@ -673,6 +752,261 @@ def get_port_scan_history(device_id: int, db: Session = Depends(get_db)):
         "ports": list(ports_dict.values()),
         "total_scans": len(scans)
     }
+
+# ============================================
+# ENDPOINTS DE ALERTAS
+# ============================================
+
+@app.get("/alerts")
+def get_alerts(
+    level: Optional[str] = None,
+    acknowledged: Optional[bool] = None,
+    limit: int = 100,
+    db: Session = Depends(get_db)
+):
+    """Obtiene lista de alertas"""
+    query = db.query(Alert)
+    
+    if level:
+        query = query.filter(Alert.level == level.upper())
+    
+    if acknowledged is not None:
+        query = query.filter(Alert.is_acknowledged == acknowledged)
+    
+    alerts = query.order_by(Alert.timestamp.desc()).limit(limit).all()
+    
+    return {
+        "alerts": [
+            {
+                "id": a.id,
+                "level": a.level,
+                "condition": a.condition,
+                "message": a.message,
+                "device_id": a.device_id,
+                "device_name": a.device_name,
+                "device_ip": a.device_ip,
+                "metadata": a.alert_metadata,
+                "timestamp": a.timestamp.isoformat(),
+                "is_acknowledged": a.is_acknowledged,
+                "acknowledged_by": a.acknowledged_by,
+                "acknowledged_at": a.acknowledged_at.isoformat() if a.acknowledged_at else None
+            }
+            for a in alerts
+        ],
+        "total": len(alerts)
+    }
+
+@app.get("/alerts/active")
+def get_active_alerts(
+    level: Optional[str] = None
+):
+    """Obtiene alertas activas (no reconocidas) del AlertManager"""
+    if not alert_manager:
+        return {"alerts": [], "total": 0}
+    
+    level_enum = None
+    if level:
+        try:
+            level_enum = AlertLevel(level.lower())
+        except ValueError:
+            pass
+    
+    alerts = alert_manager.get_active_alerts(level=level_enum)
+    
+    return {
+        "alerts": alerts,
+        "total": len(alerts)
+    }
+
+@app.post("/alerts/{alert_id}/acknowledge")
+def acknowledge_alert(
+    alert_id: int,
+    user: str = "system",
+    db: Session = Depends(get_db)
+):
+    """Marca una alerta como reconocida"""
+    # Actualizar en base de datos
+    alert = db.query(Alert).filter(Alert.id == alert_id).first()
+    if alert:
+        alert.is_acknowledged = True
+        alert.acknowledged_by = user
+        alert.acknowledged_at = datetime.datetime.utcnow()
+        db.commit()
+    
+    # Actualizar en AlertManager
+    if alert_manager:
+        alert_manager.acknowledge_alert(alert_id, user)
+    
+    return {"status": "success", "alert_id": alert_id}
+
+@app.get("/alerts/rules")
+def get_alert_rules(db: Session = Depends(get_db)):
+    """Obtiene lista de reglas de alertas"""
+    rules = db.query(AlertRule).all()
+    
+    return {
+        "rules": [
+            {
+                "id": r.id,
+                "name": r.name,
+                "description": r.description,
+                "enabled": r.enabled,
+                "device_id": r.device_id,
+                "condition": r.condition,
+                "level": r.level,
+                "channels": r.channels,
+                "threshold": r.threshold,
+                "throttle_minutes": r.throttle_minutes,
+                "escalate_after_minutes": r.escalate_after_minutes,
+                "last_triggered": r.last_triggered.isoformat() if r.last_triggered else None,
+                "created_at": r.created_at.isoformat()
+            }
+            for r in rules
+        ],
+        "total": len(rules)
+    }
+
+class AlertRuleCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    enabled: bool = True
+    device_id: Optional[int] = None
+    condition: str
+    level: str = "WARNING"
+    channels: List[str] = ["in_app"]
+    threshold: Optional[float] = None
+    throttle_minutes: int = 5
+    escalate_after_minutes: Optional[int] = None
+
+@app.post("/alerts/rules")
+def create_alert_rule(rule: AlertRuleCreate, db: Session = Depends(get_db)):
+    """Crea una nueva regla de alerta"""
+    db_rule = AlertRule(
+        name=rule.name,
+        description=rule.description,
+        enabled=rule.enabled,
+        device_id=rule.device_id,
+        condition=rule.condition,
+        level=rule.level,
+        channels=rule.channels,
+        threshold=rule.threshold,
+        throttle_minutes=rule.throttle_minutes,
+        escalate_after_minutes=rule.escalate_after_minutes
+    )
+    
+    db.add(db_rule)
+    db.commit()
+    db.refresh(db_rule)
+    
+    # Recargar reglas en AlertManager
+    if alert_manager:
+        alert_manager.load_rules()
+    
+    return {"status": "success", "rule_id": db_rule.id}
+
+@app.put("/alerts/rules/{rule_id}")
+def update_alert_rule(
+    rule_id: int,
+    rule: AlertRuleCreate,
+    db: Session = Depends(get_db)
+):
+    """Actualiza una regla de alerta"""
+    db_rule = db.query(AlertRule).filter(AlertRule.id == rule_id).first()
+    
+    if not db_rule:
+        return {"status": "error", "message": "Rule not found"}
+    
+    db_rule.name = rule.name
+    db_rule.description = rule.description
+    db_rule.enabled = rule.enabled
+    db_rule.device_id = rule.device_id
+    db_rule.condition = rule.condition
+    db_rule.level = rule.level
+    db_rule.channels = rule.channels
+    db_rule.threshold = rule.threshold
+    db_rule.throttle_minutes = rule.throttle_minutes
+    db_rule.escalate_after_minutes = rule.escalate_after_minutes
+    
+    db.commit()
+    
+    # Recargar reglas en AlertManager
+    if alert_manager:
+        alert_manager.load_rules()
+    
+    return {"status": "success", "rule_id": rule_id}
+
+@app.delete("/alerts/rules/{rule_id}")
+def delete_alert_rule(rule_id: int, db: Session = Depends(get_db)):
+    """Elimina una regla de alerta"""
+    db_rule = db.query(AlertRule).filter(AlertRule.id == rule_id).first()
+    
+    if not db_rule:
+        return {"status": "error", "message": "Rule not found"}
+    
+    db.delete(db_rule)
+    db.commit()
+    
+    # Recargar reglas en AlertManager
+    if alert_manager:
+        alert_manager.load_rules()
+    
+    return {"status": "success", "rule_id": rule_id}
+
+class TestAlertRequest(BaseModel):
+    level: str = "INFO"
+    message: str = "Test alert"
+    channels: List[str] = ["in_app"]
+
+@app.post("/alerts/test")
+def test_alert(request: TestAlertRequest):
+    """Envía una alerta de prueba y la guarda en BD"""
+    if not alert_manager:
+        return {"status": "error", "message": "Alert manager not initialized"}
+        
+    db = SessionLocal()
+    try:
+        # 1. Guardar en Base de Datos (Persistencia)
+        db_alert = Alert(
+            level=request.level.upper(),
+            condition="NEW_DEVICE", # Condición genérica para tests
+            message=request.message,
+            device_name="Test Device",
+            device_ip="192.168.1.999",
+            alert_metadata={"is_test": True}
+        )
+        db.add(db_alert)
+        db.commit()
+        db.refresh(db_alert)
+        
+        # 2. Enviar Notificación (AlertManager)
+        from alerts import Alert as AlertClass
+        
+        # Convertir DB Alert a Python Alert para el manager
+        py_alert = AlertClass(
+            level=AlertLevel(request.level.lower()),
+            condition=AlertCondition.NEW_DEVICE,
+            message=request.message,
+            device_name="Test Device",
+            device_ip="192.168.1.999",
+            alert_metadata={"is_test": True}
+        )
+        py_alert.id = db_alert.id # Vincular ID
+        
+        # Enviar por canales especificados
+        channels = [AlertChannel(ch) for ch in request.channels]
+        alert_manager.send_notification(py_alert, channels)
+        
+        return {
+            "status": "success",
+            "message": "Test alert sent and saved",
+            "alert_id": db_alert.id,
+            "channels": request.channels
+        }
+    except Exception as e:
+        logger.error(f"Error sending test alert: {e}")
+        return {"status": "error", "message": str(e)}
+    finally:
+        db.close()
 
 # ============================================
 # WEBSOCKET ENDPOINT

@@ -3,6 +3,8 @@ import axios from 'axios';
 import DeviceDetailView from './components/DeviceDetailView';
 import PortScannerModal from './components/PortScannerModal';
 import NetworkMap from './components/NetworkMap';
+import AlertsPanel from './components/AlertsPanel';
+import AlertNotification from './components/AlertNotification';
 import {
   Activity,
   Shield,
@@ -51,6 +53,9 @@ function App() {
   const [selectedDevice, setSelectedDevice] = useState(null); // Para vista detallada
   const [showPortScanner, setShowPortScanner] = useState(false); // Para modal de escaneo de puertos
   const [showNetworkMap, setShowNetworkMap] = useState(false); // Para mapa de red
+  const [showAlertsPanel, setShowAlertsPanel] = useState(false); // Para panel de alertas
+  const [activeAlerts, setActiveAlerts] = useState([]); // Alertas activas
+  const [alertNotifications, setAlertNotifications] = useState([]); // Notificaciones toast
   const [theme, setTheme] = useState(() => {
     const saved = localStorage.getItem('netguard-theme');
     return saved || 'dark';
@@ -109,6 +114,51 @@ function App() {
       return () => clearInterval(interval);
     }
   }, [config.autoRefresh, config.refreshInterval]);
+
+  // Polling de alertas activas
+  useEffect(() => {
+    const fetchActiveAlerts = async () => {
+      try {
+        const response = await axios.get(`${API_BASE}/alerts/active`);
+        const newAlerts = response.data.alerts || [];
+
+        // Detectar nuevas alertas para mostrar notificación
+        if (config.showNotifications) {
+          newAlerts.forEach(alert => {
+            const isNew = !activeAlerts.find(a => a.id === alert.id);
+            if (isNew && alert.level !== 'DEBUG') {
+              // Añadir notificación toast
+              setAlertNotifications(prev => [...prev, alert]);
+            }
+          });
+        }
+
+        setActiveAlerts(newAlerts);
+      } catch (error) {
+        console.error('Error fetching active alerts:', error);
+      }
+    };
+
+    fetchActiveAlerts();
+    const interval = setInterval(fetchActiveAlerts, 10000); // Cada 10 segundos
+    return () => clearInterval(interval);
+  }, [config.showNotifications, activeAlerts.length]);
+
+  const acknowledgeAlert = async (alertId) => {
+    try {
+      await axios.post(`${API_BASE}/alerts/${alertId}/acknowledge?user=admin`);
+      // Remover de notificaciones
+      setAlertNotifications(prev => prev.filter(a => a.id !== alertId));
+      // Actualizar alertas activas
+      setActiveAlerts(prev => prev.filter(a => a.id !== alertId));
+    } catch (error) {
+      console.error('Error acknowledging alert:', error);
+    }
+  };
+
+  const removeNotification = (alertId) => {
+    setAlertNotifications(prev => prev.filter(a => a.id !== alertId));
+  };
 
   const handleUpdateAlias = async (mac, newAlias) => {
     try {
@@ -282,10 +332,30 @@ function App() {
             <Wifi size={20} /> Dispositivos
           </div>
           <div
-            className={`nav-item ${activeTab === 'alerts' ? 'active' : ''}`}
-            onClick={() => setActiveTab('alerts')}
+            className="nav-item"
+            onClick={() => setShowAlertsPanel(true)}
+            style={{ cursor: 'pointer', position: 'relative' }}
           >
             <Bell size={20} /> Alertas
+            {activeAlerts.length > 0 && (
+              <span style={{
+                position: 'absolute',
+                top: '0.5rem',
+                right: '0.5rem',
+                background: '#ef4444',
+                color: 'white',
+                borderRadius: '50%',
+                width: '20px',
+                height: '20px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '0.75rem',
+                fontWeight: 'bold'
+              }}>
+                {activeAlerts.length}
+              </span>
+            )}
           </div>
           <div
             className="nav-item"
@@ -989,6 +1059,31 @@ function App() {
           onClose={() => setShowNetworkMap(false)}
         />
       )}
+      {/* Alerts Panel */}
+      {showAlertsPanel && (
+        <AlertsPanel
+          onClose={() => setShowAlertsPanel(false)}
+        />
+      )}
+      {/* Alert Notifications (Toasts) */}
+      {alertNotifications.map((alert, index) => (
+        <div
+          key={alert.id || index}
+          style={{
+            position: 'fixed',
+            top: `${2 + index * 6}rem`,
+            right: '2rem',
+            zIndex: 9999
+          }}
+        >
+          <AlertNotification
+            alert={alert}
+            onClose={() => removeNotification(alert.id)}
+            onAcknowledge={acknowledgeAlert}
+            autoClose={true}
+          />
+        </div>
+      ))}
     </div>
   );
 }

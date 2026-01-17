@@ -49,9 +49,13 @@ class Alert(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     device_id = Column(Integer, ForeignKey("devices.id"), index=True)
-    level = Column(String, default="INFO")  # INFO, WARNING, ERROR, CRITICAL
-    type = Column(String, index=True) # NEW_DEVICE, OFFLINE, REAPPEARED, PORT_CHANGE, etc.
+    level = Column(String, default="INFO", index=True)  # CRITICAL, WARNING, INFO, DEBUG
+    condition = Column(String, index=True)  # DEVICE_OFFLINE, HIGH_LATENCY, etc.
+    type = Column(String, index=True)  # Alias de condition (compatibilidad)
     message = Column(Text)
+    device_name = Column(String)  # Cache del nombre
+    device_ip = Column(String)  # Cache de la IP
+    alert_metadata = Column(JSON)  # Datos adicionales
     timestamp = Column(DateTime, default=datetime.datetime.utcnow, index=True)
     is_read = Column(Boolean, default=False)
     is_acknowledged = Column(Boolean, default=False)
@@ -98,17 +102,24 @@ class AlertRule(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
     description = Column(Text)
-    enabled = Column(Boolean, default=True)
+    enabled = Column(Boolean, default=True, index=True)
     device_id = Column(Integer, ForeignKey("devices.id"))  # NULL = global rule
     sensor_id = Column(Integer, ForeignKey("sensors.id"))
+    condition = Column(String, index=True)  # DEVICE_OFFLINE, HIGH_LATENCY, etc.
+    level = Column(String, default="WARNING")  # CRITICAL, WARNING, INFO, DEBUG
+    channels = Column(JSON)  # ["in_app", "email", "telegram", "webhook"]
+    threshold = Column(Float)  # Valor umbral para condiciones numéricas
+    throttle_minutes = Column(Integer, default=5)  # Anti-spam
+    escalate_after_minutes = Column(Integer)  # Escalar si no se atiende
+    last_triggered = Column(DateTime)  # Última vez que se disparó
+    # Campos legacy (compatibilidad)
     metric_name = Column(String)
-    condition = Column(String)  # THRESHOLD, CHANGE, PATTERN
     threshold_value = Column(Float)
     threshold_operator = Column(String)  # >, <, ==, !=
     aggregation = Column(String)  # AVG, MAX, MIN, SUM
     time_window = Column(Integer)  # Minutos
     alert_level = Column(String, default="WARNING")
-    notification_channels = Column(JSON)  # ["email", "telegram", "webhook"]
+    notification_channels = Column(JSON)  # [" email", "telegram", "webhook"]
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 class PortScan(Base):

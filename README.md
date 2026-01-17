@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)
+![Version](https://img.shields.io/badge/version-3.1.0-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.8+-green.svg)
 ![Node](https://img.shields.io/badge/node-18+-green.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
@@ -28,7 +28,7 @@
 - 📈 **Métricas Detalladas** - Latencia, packet loss, uptime
 - 🎨 **Tema Claro/Oscuro** - Interfaz personalizable
 - 📥 **Exportación** - CSV y JSON
-- 🔔 **Alertas** - Notificaciones de nuevos dispositivos
+- 🔔 **Sistema de Alertas Avanzado** - Multinivel, persistentes y configurables
 - 🔒 **Autorización** - Control de dispositivos permitidos
 
 ---
@@ -123,10 +123,13 @@ DETENER.bat
 - **JSON** - Para programación
 - Incluye todos los campos
 
-### 6. Alertas
-- Notificaciones de nuevos dispositivos
-- Modal con detalles
-- Historial de alertas
+### 6. Sistema de Alertas (NUEVO v3.1)
+- **Multinivel**: CRITICAL, WARNING, INFO, DEBUG
+- **Panel de Gestión**: Visualiza y reconoce alertas activas
+- **Notificaciones Toast**: Alertas emergentes en tiempo real
+- **Persistencia en BD**: Las alertas se guardan y recuperan tras reinicios
+- **Badge en Sidebar**: Contador de alertas activas
+- **Detección Automática**: Nuevos dispositivos, dispositivos offline/online
 
 ### 7. Configuración
 - Actualización automática (15s - 5min)
@@ -146,12 +149,15 @@ control-red-casa/
 │   ├── port_scanner.py     # Escaneo de puertos
 │   ├── database.py         # SQLAlchemy ORM
 │   ├── websocket_manager.py# WebSocket
+│   ├── alerts.py           # Sistema de Alertas
 │   └── requirements.txt    # Dependencias Python
 │
 ├── frontend/               # Cliente React
 │   ├── src/
 │   │   ├── App.jsx        # Componente principal
 │   │   ├── components/    # Componentes
+│   │   │   ├── AlertsPanel.jsx  # Panel de alertas
+│   │   │   ├── AlertNotification.jsx # Toast de alertas
 │   │   │   ├── DeviceDetailView.jsx
 │   │   │   ├── PortScannerModal.jsx
 │   │   │   ├── NetworkMap.jsx
@@ -163,7 +169,7 @@ control-red-casa/
 ├── INICIAR.bat            # Launcher principal
 ├── DETENER.bat            # Detener sistema
 ├── CREAR_EXE.ps1          # Crear ejecutable
-└── README.md              # Este archivo
+├── README.md              # Este archivo
 ```
 
 ---
@@ -194,6 +200,7 @@ control-red-casa/
 - [Ordenamiento de Tabla](docs/ordenamiento_tabla.md)
 - [Escáner de Puertos](docs/escaner_puertos.md)
 - [Tema y Mapa de Red](docs/tema_y_mapa_red.md)
+- [Guía de Alertas](docs/guia_pruebas_alertas.md)
 - [Resumen Completo](docs/resumen_final_completo.md)
 
 ### Solución de Problemas
@@ -232,9 +239,9 @@ Las contribuciones son bienvenidas! Si quieres mejorar el proyecto:
 ## 📝 Roadmap
 
 ### Próximas Funcionalidades
-- [ ] WebSocket en tiempo real
-- [ ] Grupos de dispositivos
-- [ ] Alertas personalizadas
+- [x] WebSocket en tiempo real
+- [x] Grupos de dispositivos
+- [x] Alertas personalizadas
 - [ ] Historial de conexiones
 - [ ] Drag & drop en mapa
 - [ ] Exportar mapa como imagen
@@ -277,11 +284,11 @@ Este proyecto está bajo la Licencia MIT - ver el archivo [LICENSE](LICENSE) par
 
 ## 📊 Estadísticas
 
-- **Líneas de código**: ~2000+
-- **Componentes**: 8
-- **Endpoints API**: 17
-- **Funcionalidades**: 8 principales
-- **Versión**: 3.0.0
+- **Líneas de código**: ~2500+
+- **Componentes**: 10
+- **Endpoints API**: 21
+- **Funcionalidades**: 9 principales
+- **Versión**: 3.1.0
 
 ---
 
