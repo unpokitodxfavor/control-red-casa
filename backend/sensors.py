@@ -34,68 +34,59 @@ class BaseSensor(ABC):
         return self.__class__.__name__.replace("Sensor", "").upper()
 
 
+
 class PingSensor(BaseSensor):
     """Sensor de ping - mide latencia y packet loss"""
     
     async def collect(self) -> Dict[str, float]:
-        """Ping al dispositivo y recolecta métricas"""
+        """Ping al dispositivo y recolecta métricas (Non-blocking)"""
         try:
             param = '-n' if platform.system().lower() == 'windows' else '-c'
             count = self.config.get('ping_count', 4)
             
-            # Ejecutar ping
-            command = ['ping', param, str(count), self.device_ip]
-            result = subprocess.run(
-                command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                timeout=10,
-                text=True
+            # Ejecutar ping asíncrono
+            process = await asyncio.create_subprocess_exec(
+                'ping', param, str(count), self.device_ip,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
             )
             
-            if result.returncode == 0:
-                output = result.stdout.lower()
-                
+            try:
+                # Wait with timeout
+                stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=10.0)
+                stdout = stdout.decode('utf-8', errors='ignore').lower()
+            except asyncio.TimeoutError:
+                process.kill()
+                raise Exception("Ping timed out")
+            
+            if process.returncode == 0:
                 # Parse latency
                 latency = None
-                if 'average' in output:
-                    # Windows format
-                    for line in output.split('\n'):
+                if 'average' in stdout: # Windows
+                    for line in stdout.split('\r\n'):
                         if 'average' in line:
                             parts = line.split('=')
                             if len(parts) > 1:
-                                avg_part = parts[-1].strip().replace('ms', '').strip()
                                 try:
-                                    latency = float(avg_part)
-                                except ValueError:
-                                    pass
-                elif 'avg' in output:
-                    # Linux format: rtt min/avg/max/mdev = X/Y/Z/W ms
-                    for line in output.split('\n'):
+                                    latency = float(parts[-1].strip().replace('ms', '').strip())
+                                except: pass
+                elif 'avg' in stdout: # Linux
+                    for line in stdout.split('\n'):
                         if 'rtt' in line or 'avg' in line:
-                            parts = line.split('=')
-                            if len(parts) > 1:
-                                stats = parts[1].split('/')
-                                if len(stats) >= 2:
-                                    try:
-                                        latency = float(stats[1].strip())
-                                    except ValueError:
-                                        pass
+                            try:
+                                latency = float(line.split('=')[1].split('/')[1])
+                            except: pass
                 
                 # Parse packet loss
                 packet_loss = 0
-                for line in output.split('\n'):
+                for line in stdout.split('\r\n'):
                     if 'loss' in line or 'lost' in line:
-                        # Extract percentage
                         if '%' in line:
                             parts = line.split('%')[0].split()
-                            for part in reversed(parts):
-                                try:
-                                    packet_loss = float(part)
-                                    break
-                                except ValueError:
-                                    continue
-                
+                            try:
+                                packet_loss = float(parts[-1])
+                            except: pass
+
                 self.status = "OK"
                 return {
                     "ping_latency": latency if latency is not None else 0,
@@ -115,21 +106,29 @@ class PortScanSensor(BaseSensor):
     """Sensor de escaneo de puertos"""
     
     async def collect(self) -> Dict[str, float]:
-        """Escanea puertos comunes"""
+        """Escanea puertos comunes (Non-blocking)"""
         try:
             import socket
+            loop = asyncio.get_event_loop()
             
             common_ports = self.config.get('ports', [80, 443, 22, 21, 3389, 8080])
             open_ports = 0
             
-            for port in common_ports:
+            def check_port(ip, port):
                 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 sock.settimeout(1)
-                result = sock.connect_ex((self.device_ip, port))
+                result = sock.connect_ex((ip, port))
                 sock.close()
-                
-                if result == 0:
-                    open_ports += 1
+                return result == 0
+
+            # Ejecutar checks en paralelo/executor
+            futures = [
+                loop.run_in_executor(None, check_port, self.device_ip, port)
+                for port in common_ports
+            ]
+            
+            results = await asyncio.gather(*futures)
+            open_ports = sum(results)
             
             self.status = "OK"
             return {
@@ -147,23 +146,30 @@ class HTTPSensor(BaseSensor):
     """Sensor de disponibilidad HTTP/HTTPS"""
     
     async def collect(self) -> Dict[str, float]:
-        """Verifica disponibilidad y tiempo de respuesta HTTP"""
+        """Verifica disponibilidad (Non-blocking)"""
         try:
             import requests
             import time
+            loop = asyncio.get_event_loop()
             
             url = self.config.get('url', f'http://{self.device_ip}')
             
-            start = time.time()
-            response = requests.get(url, timeout=10, verify=False)
-            elapsed = (time.time() - start) * 1000  # Convert to ms
+            def check_http():
+                start = time.time()
+                try:
+                    resp = requests.get(url, timeout=10, verify=False)
+                    elapsed = (time.time() - start) * 1000
+                    return elapsed, resp.status_code, 1 if resp.status_code == 200 else 0
+                except:
+                    return 0, 0, 0
             
-            self.status = "OK" if response.status_code == 200 else "WARNING"
+            elapsed, status, available = await loop.run_in_executor(None, check_http)
             
+            self.status = "OK" if status == 200 else "WARNING"
             return {
                 "http_response_time": elapsed,
-                "http_status_code": response.status_code,
-                "http_available": 1 if response.status_code == 200 else 0
+                "http_status_code": status,
+                "http_available": available
             }
             
         except Exception as e:
@@ -177,31 +183,29 @@ class HTTPSensor(BaseSensor):
 
 
 class BandwidthSensor(BaseSensor):
-    """Sensor de ancho de banda (requiere integración con router o herramientas específicas)"""
+    """Sensor de ancho de banda (System-wide)"""
     
     async def collect(self) -> Dict[str, float]:
-        """Recolecta estadísticas de ancho de banda"""
+        """Recolecta estadísticas de ancho de banda (Non-blocking call to psutil)"""
         try:
             import psutil
+            import time
+            loop = asyncio.get_event_loop()
             
-            # Nota: Esto da el ancho de banda total del sistema, no por dispositivo
-            # Para por dispositivo necesitaríamos integración con el router
-            net_io = psutil.net_io_counters()
+            # psutil is fast but let's wrap just in case
+            net_io = await loop.run_in_executor(None, psutil.net_io_counters)
             
-            # Guardar estado anterior para calcular diferencia
             if hasattr(self, '_last_bytes_sent'):
                 bytes_sent_diff = net_io.bytes_sent - self._last_bytes_sent
                 bytes_recv_diff = net_io.bytes_recv - self._last_bytes_recv
                 time_diff = (datetime.datetime.now() - self._last_measurement).total_seconds()
                 
-                # Calcular Mbps
                 upload_mbps = (bytes_sent_diff * 8) / (time_diff * 1_000_000) if time_diff > 0 else 0
                 download_mbps = (bytes_recv_diff * 8) / (time_diff * 1_000_000) if time_diff > 0 else 0
             else:
                 upload_mbps = 0
                 download_mbps = 0
             
-            # Guardar estado actual
             self._last_bytes_sent = net_io.bytes_sent
             self._last_bytes_recv = net_io.bytes_recv
             self._last_measurement = datetime.datetime.now()

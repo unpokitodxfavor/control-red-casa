@@ -13,7 +13,7 @@ if %errorLevel% equ 0 (
     echo.
     echo Iniciando backend con python...
     cd /d "%~dp0"
-    python main.py
+    python server.py
     pause
     exit /b 0
 )

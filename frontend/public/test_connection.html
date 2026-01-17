@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Diagnóstico de Conexión</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background: #1a1a1a; color: white; }
+        .status { padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+        .success { background: #166534; border: 1px solid #22c55e; }
+        .error { background: #991b1b; border: 1px solid #ef4444; }
+        button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
+        pre { background: #333; padding: 10px; border-radius: 4px; overflow: auto; }
+    </style>
+</head>
+<body>
+    <h1>Herramienta de Diagnóstico</h1>
+    <p>Probando conexión directa al Backend (Puerto 8001)...</p>
+    
+    <div id="result" class="status" style="display:none"></div>
+    <div id="detail"></div>
+
+    <button onclick="checkConnection()">Reintentar Conexión</button>
+
+    <script>
+        const API_URL = 'http://127.0.0.1:8001/test_connection';
+
+        async function checkConnection() {
+            const resultDiv = document.getElementById('result');
+            const detailDiv = document.getElementById('detail');
+            
+            resultDiv.style.display = 'block';
+            resultDiv.className = 'status';
+            resultDiv.innerHTML = 'Conectando...';
+            detailDiv.innerHTML = '';
+
+            try {
+                const start = performance.now();
+                const response = await fetch(API_URL);
+                const text = await response.text();
+                const end = performance.now();
+
+                if (response.ok) {
+                    resultDiv.className = 'status success';
+                    resultDiv.innerHTML = `✅ <strong>ÉXITO</strong>: Conexión establecida en ${(end - start).toFixed(2)}ms`;
+                    detailDiv.innerHTML = `<pre>${text}</pre>`;
+                } else {
+                    throw new Error(`Error HTTP: ${response.status}`);
+                }
+            } catch (error) {
+                resultDiv.className = 'status error';
+                resultDiv.innerHTML = `❌ <strong>FALLO</strong>: No se pudo conectar al Backend`;
+                detailDiv.innerHTML = `<p>Error: ${error.message}</p>
+                <p>Posibles causas:</p>
+                <ul>
+                    <li>El backend no se está ejecutando (revisa la ventana negra).</li>
+                    <li>El puerto 8001 está bloqueado.</li>
+                    <li>El navegador bloquea la conexión a 127.0.0.1</li>
+                </ul>`;
+            }
+        }
+
+        // Auto-chk
+        checkConnection();
+    </script>
+</body>
+</html>

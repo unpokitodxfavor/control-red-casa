@@ -318,11 +318,11 @@ class AlertManager:
         except Exception as e:
             logger.error(f"Failed to send email: {e}")
 
-    def _send_telegram(self, alert: Alert):
+    def _send_telegram(self, alert: Alert, force: bool = False):
         """Envía alerta por Telegram"""
         telegram_config = self.config.get('telegram', {})
         
-        if not telegram_config.get('enabled'):
+        if not force and not telegram_config.get('enabled'):
             logger.warning("Telegram notifications disabled")
             return
         
@@ -347,8 +347,7 @@ class AlertManager:
             url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
             data = {
                 'chat_id': chat_id,
-                'text': message,
-                'parse_mode': 'Markdown'
+                'text': message
             }
             
             response = requests.post(url, json=data, timeout=10)

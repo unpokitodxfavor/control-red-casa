@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { API_BASE } from '../config';
 import {
     AlertCircle,
     AlertTriangle,
@@ -12,13 +13,12 @@ import {
     BellOff
 } from 'lucide-react';
 
-const API_BASE = 'http://127.0.0.1:8000';
 
 /**
  * AlertsPanel - Panel principal de alertas
  * Muestra alertas activas y permite reconocerlas
  */
-const AlertsPanel = ({ onClose }) => {
+const AlertsPanel = ({ onClose, refreshAlerts }) => {
     const [alerts, setAlerts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [levelFilter, setLevelFilter] = useState('all');

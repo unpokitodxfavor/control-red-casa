@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import { X, Wifi, Search, Play, Loader } from 'lucide-react';
 
-const API_BASE = 'http://127.0.0.1:8000';
+import { API_BASE } from '../config';
 
 const COMMON_PORT_RANGES = [
     { name: 'Puertos Comunes', value: 'common', description: 'HTTP, HTTPS, SSH, FTP, etc.' },

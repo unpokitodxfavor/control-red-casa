@@ -5,6 +5,7 @@ import PortScannerModal from './components/PortScannerModal';
 import NetworkMap from './components/NetworkMap';
 import AlertsPanel from './components/AlertsPanel';
 import AlertNotification from './components/AlertNotification';
+import TelegramSettings from './components/TelegramSettings';
 import {
   Activity,
   Shield,
@@ -35,7 +36,7 @@ import {
   Network
 } from 'lucide-react';
 
-const API_BASE = 'http://127.0.0.1:8000';
+import { API_BASE } from './config';
 
 function App() {
   const [devices, setDevices] = useState([]);
@@ -1005,6 +1006,8 @@ function App() {
               </div>
             </div>
 
+            <TelegramSettings />
+
             <div className="stat-card">
               <h3 style={{ fontSize: '1.25rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <Shield size={24} color="var(--accent-color)" />
@@ -1014,7 +1017,7 @@ function App() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '1rem' }}>
                 <div style={{ background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: '0.75rem' }}>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>VERSION</div>
-                  <div style={{ fontSize: '1.125rem', fontWeight: 600 }}>1.0.0</div>
+                  <div style={{ fontSize: '1.125rem', fontWeight: 600 }}>2.1.0</div>
                 </div>
                 <div style={{ background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: '0.75rem' }}>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>ESTADO</div>

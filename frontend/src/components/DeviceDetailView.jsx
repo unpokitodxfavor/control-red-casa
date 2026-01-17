@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { MetricLineChart, MetricAreaChart, StatCard, GaugeChart } from './Charts';
-import { X, Activity, TrendingUp, TrendingDown, Wifi, WifiOff } from 'lucide-react';
-
-const API_BASE = 'http://127.0.0.1:8000';
+import { X, Activity, HardDrive, Wifi, Clock, Shield, AlertTriangle, Play, Pause, RefreshCw } from 'lucide-react';
+import { API_BASE } from '../config';
 
 /**
  * Vista detallada de un dispositivo con todas sus métricas y gráficos

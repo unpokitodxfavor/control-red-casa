@@ -1,3 +1,10 @@
+import time
+print("\n" + "="*50)
+print("@@@ CRITICAL: MAIN.PY LOADED SUCCESSFULLY @@@")
+print("@@@ HOST: 0.0.0.0 (ALL INTERFACES) @@@")
+print("="*50 + "\n")
+time.sleep(2)
+
 """
 main_extended.py - Backend extendido con todas las funcionalidades PRTG-like.
 
@@ -120,7 +127,7 @@ def is_admin():
     except:
         return False
 
-app = FastAPI(title="Control Red Casa Pro API", version="2.0.0")
+app = FastAPI(title="Control Red Casa Pro API", version="2.1.0")
 
 # CORS
 app.add_middleware(
@@ -379,9 +386,28 @@ def background_scanner():
 @app.on_event("startup")
 async def startup_event():
     global metrics_collector, alert_manager
-    
+    print("\n[STARTUP] 1. Initializing Database...")
     init_db()
-    start_mdns_listener()
+    print("[STARTUP] 1. DONE")
+    
+    # Cargar configuración desde BD
+    try:
+        print("[STARTUP] 2. Loading Config...")
+        db = SessionLocal()
+        tg_token = db.query(Config).filter(Config.key == 'telegram_bot_token').first()
+        tg_chat_id = db.query(Config).filter(Config.key == 'telegram_chat_id').first()
+        tg_enabled = db.query(Config).filter(Config.key == 'telegram_enabled').first()
+        
+        if tg_token: ALERT_CONFIG['telegram']['bot_token'] = tg_token.value
+        if tg_chat_id: ALERT_CONFIG['telegram']['chat_id'] = tg_chat_id.value
+        if tg_enabled: ALERT_CONFIG['telegram']['enabled'] = (tg_enabled.value == 'true')
+        logger.info("✅ Configuración cargada desde base de datos")
+        db.close()
+        print("[STARTUP] 2. DONE")
+    except Exception as e:
+        logger.error(f"Error cargando configuración: {e}")
+
+    # start_mdns_listener()
 
     if not is_admin():
         logger.warning("!!! LA APLICACION NO ESTA CORRIENDO COMO ADMINISTRADOR !!!")
@@ -389,23 +415,29 @@ async def startup_event():
     
     # Auto-crear sensores de ping en background
     # (Lo ejecutamos en un hilo aparte para que no bloquee el inicio de la API)
+    print("[STARTUP] 4. Auto Ping Sensors...")
     threading.Thread(target=auto_create_ping_sensors, daemon=True).start()
     
     # Initialize Alert Manager
+    print("[STARTUP] 5. Alert Manager...")
     db = SessionLocal()
     alert_manager = AlertManager(db, ALERT_CONFIG)
     alert_manager.load_rules()
     logger.info("✅ Alert Manager initialized")
+    print("[STARTUP] 5. DONE")
     
     # Start scanning thread
+    print("[STARTUP] 6. Scanner...")
     thread = threading.Thread(target=background_scanner, daemon=True)
     thread.start()
     
     # Start metrics collector
+    print("[STARTUP] 7. Metrics...")
     metrics_collector = MetricsCollector()
     asyncio.create_task(metrics_collector.start())
     
     logger.info("🚀 Control Red Casa Pro iniciado correctamente")
+    print("[STARTUP] COMPLETED!\n")
 
 # ============================================
 # ENDPOINTS BÁSICOS (Existentes)
@@ -413,7 +445,14 @@ async def startup_event():
 
 @app.get("/devices")
 def get_devices(db: Session = Depends(get_db)):
+    # Debug print
+    count = db.query(Device).count()
+    print(f"\n[API DEBUG] Sending {count} devices to frontend")
     return db.query(Device).all()
+
+@app.get("/test_connection")
+def test_connection():
+    return {"status": "ok", "message": "Backend is reachable via port 8001"}
 
 @app.get("/alerts")
 def get_alerts(db: Session = Depends(get_db), limit: int = 50):
@@ -1030,6 +1069,96 @@ async def websocket_endpoint(websocket: WebSocket):
 # INICIO DE LA APLICACIÓN
 # ============================================
 
+
+# ============================================
+# ENDPOINTS CONFIGURACIÓN TELEGRAM
+# ============================================
+
+class TelegramConfigModel(BaseModel):
+    enabled: bool
+    bot_token: str
+    chat_id: str
+
+@app.get("/config/telegram")
+def get_telegram_config(db: Session = Depends(get_db)):
+    try:
+        tg_token = db.query(Config).filter(Config.key == 'telegram_bot_token').first()
+        tg_chat_id = db.query(Config).filter(Config.key == 'telegram_chat_id').first()
+        tg_enabled = db.query(Config).filter(Config.key == 'telegram_enabled').first()
+        
+        token = tg_token.value if tg_token else ""
+        # Mask token for security
+        if len(token) > 10:
+            masked = token[:5] + "*" * (len(token) - 10) + token[-5:]
+        else:
+            masked = token
+            
+        return {
+            "enabled": tg_enabled.value == 'true' if tg_enabled else False,
+            "bot_token": masked,
+            "chat_id": tg_chat_id.value if tg_chat_id else "",
+            "is_configured": bool(token and tg_chat_id)
+        }
+    except Exception as e:
+        logger.error(f"Error getting telegram config: {e}")
+        return {"error": str(e)}
+
+@app.post("/config/telegram")
+def save_telegram_config(config: TelegramConfigModel, db: Session = Depends(get_db)):
+    try:
+        # Save enabled
+        db.merge(Config(key='telegram_enabled', value=str(config.enabled).lower(), category='NOTIFICATIONS'))
+        
+        # Save token only if provided (not masked)
+        if config.bot_token and '*' not in config.bot_token:
+            db.merge(Config(key='telegram_bot_token', value=config.bot_token, category='NOTIFICATIONS'))
+            ALERT_CONFIG['telegram']['bot_token'] = config.bot_token
+            
+        # Save chat_id
+        db.merge(Config(key='telegram_chat_id', value=config.chat_id, category='NOTIFICATIONS'))
+        
+        db.commit()
+        
+        # Update runtime config
+        ALERT_CONFIG['telegram']['enabled'] = config.enabled
+        ALERT_CONFIG['telegram']['chat_id'] = config.chat_id
+        
+        return {"status": "success", "message": "Telegram configuration saved"}
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error saving telegram config: {e}")
+        return {"status": "error", "message": str(e)}
+
+@app.post("/config/telegram/test")
+def test_telegram_config(db: Session = Depends(get_db)):
+    if not alert_manager:
+        return {"status": "error", "message": "AlertManager not initialized"}
+        
+    try:
+        # Check if configured
+        if not ALERT_CONFIG['telegram']['bot_token'] or not ALERT_CONFIG['telegram']['chat_id']:
+             return {"status": "error", "message": "Telegram not configured"}
+             
+        # Import Alert class locally
+        from alerts import Alert as AlertClass
+             
+        # Create test alert
+        test_alert = AlertClass(
+            level=AlertLevel.INFO,
+            condition=AlertCondition.DEVICE_ONLINE,
+            message="🔔 Test de integración Telegram: ¡Funcionando correctamente!",
+            device_name="Sistema Control-Red-Casa",
+            device_ip="127.0.0.1"
+        )
+        
+        # Force send via Telegram
+        alert_manager._send_telegram(test_alert, force=True)
+        
+        return {"status": "success", "message": "Test message sent"}
+    except Exception as e:
+        logger.error(f"Telegram test failed: {e}")
+        return {"status": "error", "message": str(e)}
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run(app, host="127.0.0.1", port=8001)
