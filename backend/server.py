@@ -1079,6 +1079,33 @@ class TelegramConfigModel(BaseModel):
     bot_token: str
     chat_id: str
 
+@app.get("/config/dashboard")
+def get_dashboard_layout(db: Session = Depends(get_db)):
+    layout = db.query(DashboardLayout).filter(DashboardLayout.user_id == "admin").first()
+    if not layout:
+        # Default layout
+        return {
+            "layout": [
+                {"i": "stats", "x": 0, "y": 0, "w": 12, "h": 1},
+                {"i": "devices", "x": 0, "y": 1, "w": 8, "h": 4},
+                {"i": "map", "x": 8, "y": 1, "w": 4, "h": 4}
+            ]
+        }
+    return {"layout": layout.layout}
+
+@app.post("/config/dashboard")
+def save_dashboard_layout(config: dict, db: Session = Depends(get_db)):
+    layout = db.query(DashboardLayout).filter(DashboardLayout.user_id == "admin").first()
+    if not layout:
+        layout = DashboardLayout(user_id="admin", layout=config.get("layout"))
+        db.add(layout)
+    else:
+        layout.layout = config.get("layout")
+        layout.updated_at = datetime.datetime.utcnow()
+    
+    db.commit()
+    return {"status": "success"}
+
 @app.get("/config/telegram")
 def get_telegram_config(db: Session = Depends(get_db)):
     try:

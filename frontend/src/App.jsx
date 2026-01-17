@@ -6,6 +6,7 @@ import NetworkMap from './components/NetworkMap';
 import AlertsPanel from './components/AlertsPanel';
 import AlertNotification from './components/AlertNotification';
 import TelegramSettings from './components/TelegramSettings';
+import DashboardGrid from './components/Dashboard/DashboardGrid';
 import {
   Activity,
   Shield,
@@ -609,202 +610,196 @@ function App() {
         {(activeTab === 'dashboard' || activeTab === 'devices') && (
           <>
             {activeTab === 'dashboard' && (
-              <div className="stats-grid">
-                <div className="stat-card">
-                  <span className="stat-label">Total Dispositivos</span>
-                  <span className="stat-value">{stats.total}</span>
-                </div>
-                <div className="stat-card">
-                  <span className="stat-label">En Línea</span>
-                  <span className="stat-value" style={{ color: 'var(--success)' }}>{stats.online}</span>
-                </div>
-                <div className="stat-card">
-                  <span className="stat-label">Nuevos hoy</span>
-                  <span className="stat-value" style={{ color: 'var(--accent-color)' }}>{stats.new_today}</span>
-                </div>
-              </div>
+              <DashboardGrid
+                devices={devices}
+                stats={stats}
+                alerts={alerts}
+                onNavigate={setActiveTab}
+              />
             )}
 
-            <section className="table-container">
-              <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 style={{ fontSize: '1.125rem', fontWeight: 600 }}>
-                  {activeTab === 'dashboard' ? 'Dispositivos Recientes' : 'Inventario de Red'}
-                </h3>
-                <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-                  Mostrando {activeTab === 'dashboard' ? Math.min(10, filteredDevices.length) : filteredDevices.length} de {filteredDevices.length} dispositivos
-                  {statusFilter !== 'all' && ` (filtro: ${statusFilter})`}
+            {activeTab === 'devices' && (
+              <section className="table-container">
+                <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h3 style={{ fontSize: '1.125rem', fontWeight: 600 }}>
+                    {activeTab === 'dashboard' ? 'Dispositivos Recientes' : 'Inventario de Red'}
+                  </h3>
+                  <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                    Mostrando {activeTab === 'dashboard' ? Math.min(10, filteredDevices.length) : filteredDevices.length} de {filteredDevices.length} dispositivos
+                    {statusFilter !== 'all' && ` (filtro: ${statusFilter})`}
+                  </div>
                 </div>
-              </div>
-              <table>
-                <thead>
-                  <tr>
-                    <th
-                      onClick={() => handleSort('status')}
-                      style={{ cursor: 'pointer', userSelect: 'none' }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        Estado
-                        {sortField === 'status' ? (
-                          sortDirection === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />
-                        ) : (
-                          <ArrowUpDown size={14} style={{ opacity: 0.3 }} />
-                        )}
-                      </div>
-                    </th>
-                    <th
-                      onClick={() => handleSort('hostname')}
-                      style={{ cursor: 'pointer', userSelect: 'none' }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        Nombre / Hostname
-                        {sortField === 'hostname' ? (
-                          sortDirection === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />
-                        ) : (
-                          <ArrowUpDown size={14} style={{ opacity: 0.3 }} />
-                        )}
-                      </div>
-                    </th>
-                    <th
-                      onClick={() => handleSort('ip')}
-                      style={{ cursor: 'pointer', userSelect: 'none' }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        Dirección IP
-                        {sortField === 'ip' ? (
-                          sortDirection === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />
-                        ) : (
-                          <ArrowUpDown size={14} style={{ opacity: 0.3 }} />
-                        )}
-                      </div>
-                    </th>
-                    <th
-                      onClick={() => handleSort('mac')}
-                      style={{ cursor: 'pointer', userSelect: 'none' }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        Dirección MAC
-                        {sortField === 'mac' ? (
-                          sortDirection === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />
-                        ) : (
-                          <ArrowUpDown size={14} style={{ opacity: 0.3 }} />
-                        )}
-                      </div>
-                    </th>
-                    <th
-                      onClick={() => handleSort('vendor')}
-                      style={{ cursor: 'pointer', userSelect: 'none' }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        Fabricante
-                        {sortField === 'vendor' ? (
-                          sortDirection === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />
-                        ) : (
-                          <ArrowUpDown size={14} style={{ opacity: 0.3 }} />
-                        )}
-                      </div>
-                    </th>
-                    <th
-                      onClick={() => handleSort('last_seen')}
-                      style={{ cursor: 'pointer', userSelect: 'none' }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        Visto por última vez
-                        {sortField === 'last_seen' ? (
-                          sortDirection === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />
-                        ) : (
-                          <ArrowUpDown size={14} style={{ opacity: 0.3 }} />
-                        )}
-                      </div>
-                    </th>
-                    <th style={{ textAlign: 'center' }}>Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(activeTab === 'dashboard' ? filteredDevices.slice(0, 10) : filteredDevices).map(dev => (
-                    <tr key={dev.id}>
-                      <td>
-                        <span className={`badge badge-${dev.status.toLowerCase()}`}>
-                          {dev.status}
-                        </span>
-                      </td>
-                      <td>
+                <table>
+                  <thead>
+                    <tr>
+                      <th
+                        onClick={() => handleSort('status')}
+                        style={{ cursor: 'pointer', userSelect: 'none' }}
+                      >
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          {getDeviceIcon(dev.vendor || '')}
-                          {editingMac === dev.mac ? (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                              <input
-                                className="edit-input"
-                                value={editValue}
-                                onChange={(e) => setEditValue(e.target.value)}
-                                autoFocus
-                                onKeyDown={(e) => e.key === 'Enter' && handleUpdateAlias(dev.mac, editValue)}
-                              />
-                              <Check
-                                size={16}
-                                style={{ cursor: 'pointer', color: 'var(--success)' }}
-                                onClick={() => handleUpdateAlias(dev.mac, editValue)}
-                              />
-                            </div>
+                          Estado
+                          {sortField === 'status' ? (
+                            sortDirection === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />
                           ) : (
-                            <>
-                              <span style={{ cursor: 'default' }}>{dev.alias || dev.hostname || 'Desconocido'}</span>
-                              <Edit2
-                                size={14}
-                                style={{ cursor: 'pointer', opacity: 0.5, marginLeft: '0.25rem' }}
-                                onClick={() => {
-                                  setEditingMac(dev.mac);
-                                  setEditValue(dev.alias || dev.hostname || '');
-                                }}
-                              />
-                            </>
+                            <ArrowUpDown size={14} style={{ opacity: 0.3 }} />
                           )}
                         </div>
-                      </td>
-                      <td><code>{dev.ip}</code></td>
-                      <td><code>{dev.mac}</code></td>
-                      <td>{dev.vendor || 'Desconocido'}</td>
-                      <td>{new Date(dev.last_seen).toLocaleString()}</td>
-                      <td>
-                        <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
-                          <button
-                            onClick={() => setSelectedDevice(dev)}
-                            title="Ver detalles"
-                            style={{
-                              background: 'var(--accent-color)',
-                              border: 'none',
-                              borderRadius: '0.5rem',
-                              padding: '0.5rem',
-                              color: 'white',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center'
-                            }}
-                          >
-                            <Eye size={16} />
-                          </button>
-                          <button
-                            onClick={() => handleToggleAuthorization(dev.id, dev.is_authorized)}
-                            title={dev.is_authorized ? 'Bloquear dispositivo' : 'Autorizar dispositivo'}
-                            style={{
-                              background: dev.is_authorized ? 'var(--danger)' : 'var(--success)',
-                              border: 'none',
-                              borderRadius: '0.5rem',
-                              padding: '0.5rem',
-                              color: 'white',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center'
-                            }}
-                          >
-                            {dev.is_authorized ? <Lock size={16} /> : <Unlock size={16} />}
-                          </button>
+                      </th>
+                      <th
+                        onClick={() => handleSort('hostname')}
+                        style={{ cursor: 'pointer', userSelect: 'none' }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          Nombre / Hostname
+                          {sortField === 'hostname' ? (
+                            sortDirection === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />
+                          ) : (
+                            <ArrowUpDown size={14} style={{ opacity: 0.3 }} />
+                          )}
                         </div>
-                      </td>
+                      </th>
+                      <th
+                        onClick={() => handleSort('ip')}
+                        style={{ cursor: 'pointer', userSelect: 'none' }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          Dirección IP
+                          {sortField === 'ip' ? (
+                            sortDirection === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />
+                          ) : (
+                            <ArrowUpDown size={14} style={{ opacity: 0.3 }} />
+                          )}
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => handleSort('mac')}
+                        style={{ cursor: 'pointer', userSelect: 'none' }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          Dirección MAC
+                          {sortField === 'mac' ? (
+                            sortDirection === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />
+                          ) : (
+                            <ArrowUpDown size={14} style={{ opacity: 0.3 }} />
+                          )}
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => handleSort('vendor')}
+                        style={{ cursor: 'pointer', userSelect: 'none' }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          Fabricante
+                          {sortField === 'vendor' ? (
+                            sortDirection === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />
+                          ) : (
+                            <ArrowUpDown size={14} style={{ opacity: 0.3 }} />
+                          )}
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => handleSort('last_seen')}
+                        style={{ cursor: 'pointer', userSelect: 'none' }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          Visto por última vez
+                          {sortField === 'last_seen' ? (
+                            sortDirection === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />
+                          ) : (
+                            <ArrowUpDown size={14} style={{ opacity: 0.3 }} />
+                          )}
+                        </div>
+                      </th>
+                      <th style={{ textAlign: 'center' }}>Acciones</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </section>
+                  </thead>
+                  <tbody>
+                    {(activeTab === 'dashboard' ? filteredDevices.slice(0, 10) : filteredDevices).map(dev => (
+                      <tr key={dev.id}>
+                        <td>
+                          <span className={`badge badge-${dev.status.toLowerCase()}`}>
+                            {dev.status}
+                          </span>
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            {getDeviceIcon(dev.vendor || '')}
+                            {editingMac === dev.mac ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <input
+                                  className="edit-input"
+                                  value={editValue}
+                                  onChange={(e) => setEditValue(e.target.value)}
+                                  autoFocus
+                                  onKeyDown={(e) => e.key === 'Enter' && handleUpdateAlias(dev.mac, editValue)}
+                                />
+                                <Check
+                                  size={16}
+                                  style={{ cursor: 'pointer', color: 'var(--success)' }}
+                                  onClick={() => handleUpdateAlias(dev.mac, editValue)}
+                                />
+                              </div>
+                            ) : (
+                              <>
+                                <span style={{ cursor: 'default' }}>{dev.alias || dev.hostname || 'Desconocido'}</span>
+                                <Edit2
+                                  size={14}
+                                  style={{ cursor: 'pointer', opacity: 0.5, marginLeft: '0.25rem' }}
+                                  onClick={() => {
+                                    setEditingMac(dev.mac);
+                                    setEditValue(dev.alias || dev.hostname || '');
+                                  }}
+                                />
+                              </>
+                            )}
+                          </div>
+                        </td>
+                        <td><code>{dev.ip}</code></td>
+                        <td><code>{dev.mac}</code></td>
+                        <td>{dev.vendor || 'Desconocido'}</td>
+                        <td>{new Date(dev.last_seen).toLocaleString()}</td>
+                        <td>
+                          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
+                            <button
+                              onClick={() => setSelectedDevice(dev)}
+                              title="Ver detalles"
+                              style={{
+                                background: 'var(--accent-color)',
+                                border: 'none',
+                                borderRadius: '0.5rem',
+                                padding: '0.5rem',
+                                color: 'white',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center'
+                              }}
+                            >
+                              <Eye size={16} />
+                            </button>
+                            <button
+                              onClick={() => handleToggleAuthorization(dev.id, dev.is_authorized)}
+                              title={dev.is_authorized ? 'Bloquear dispositivo' : 'Autorizar dispositivo'}
+                              style={{
+                                background: dev.is_authorized ? 'var(--danger)' : 'var(--success)',
+                                border: 'none',
+                                borderRadius: '0.5rem',
+                                padding: '0.5rem',
+                                color: 'white',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center'
+                              }}
+                            >
+                              {dev.is_authorized ? <Lock size={16} /> : <Unlock size={16} />}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </section>
+            )}
           </>
         )}
 

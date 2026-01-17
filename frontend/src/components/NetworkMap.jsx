@@ -5,7 +5,7 @@ import { X, Wifi, WifiOff, Router, Smartphone, Laptop, Printer, Server } from 'l
  * Mapa de Red Interactivo
  * Visualiza la topología de red con nodos y conexiones
  */
-const NetworkMap = ({ devices, onClose }) => {
+const NetworkMap = ({ devices, onClose, isWidget }) => {
     const canvasRef = useRef(null);
     const [nodes, setNodes] = useState([]);
     const [selectedNode, setSelectedNode] = useState(null);
@@ -195,6 +195,37 @@ const NetworkMap = ({ devices, onClose }) => {
     };
 
     const selectedNodeData = nodes.find(n => n.id === selectedNode);
+
+    if (isWidget) {
+        return (
+            <div style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
+                <canvas
+                    ref={canvasRef}
+                    width={400}
+                    height={300}
+                    onClick={handleCanvasClick}
+                    onMouseMove={handleCanvasMove}
+                    style={{ width: '100%', height: '100%' }}
+                />
+                {/* Mini Legend */}
+                <div style={{
+                    position: 'absolute',
+                    bottom: '0.5rem',
+                    right: '0.5rem',
+                    background: 'rgba(0,0,0,0.5)',
+                    padding: '0.5rem',
+                    borderRadius: '0.5rem',
+                    fontSize: '0.7rem'
+                }}>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <span style={{ color: '#3b82f6' }}>● GW</span>
+                        <span style={{ color: '#10b981' }}>● On</span>
+                        <span style={{ color: '#ef4444' }}>● Off</span>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div style={{

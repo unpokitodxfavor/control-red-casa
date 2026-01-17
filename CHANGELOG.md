@@ -2,6 +2,13 @@
 
 Todas las mejoras notables de "Control Red Casa Pro" se documentarán en este archivo.
 
+## [2.2.0] - 2026-01-17
+### Añadido
+- **Dashboard Personalizable**: Integración de `react-grid-layout`.
+- **Widgets Movibles**: Estadísticas, Tabla de Dispositivos y Mapa de Red ahora son widgets arrastrables y redimensionables.
+- **Persistencia Visual**: La disposición del dashboard se guarda en la base de datos por usuario.
+- **Configuración Local Global**: Correcciones menores en endpoints de configuración.
+
 ## [2.1.0] - 2026-01-17
 ### Añadido
 - **Telegram Integrado**: Sistema completo de notificaciones al móvil.
