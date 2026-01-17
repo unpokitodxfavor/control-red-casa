@@ -1,0 +1,14 @@
+scapy
+fastapi
+uvicorn[standard]
+sqlalchemy
+winotify
+python-dotenv
+requests
+psutil
+zeroconf
+websockets
+python-multipart
+python-jose[cryptography]
+passlib[bcrypt]
+
