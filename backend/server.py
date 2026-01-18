@@ -108,6 +108,13 @@ def is_admin():
     except:
         return False
 
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+import sys
+import os
+
+# ... imports ...
+
 app = FastAPI(title="Control Red Casa Pro API", version="2.2.0")
 
 # CORS
@@ -117,6 +124,32 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Static Files Logic for PyInstaller
+if getattr(sys, 'frozen', False):
+    # Running as compiled EXE
+    base_path = sys._MEIPASS
+    static_dir = os.path.join(base_path, "static")
+else:
+    # Running as script
+    base_path = os.path.dirname(os.path.abspath(__file__))
+    static_dir = os.path.join(base_path, "static")
+
+# Ensure static directory exists before mounting
+if os.path.exists(static_dir):
+    app.mount("/assets", StaticFiles(directory=os.path.join(static_dir, "assets")), name="assets")
+
+    # Catch-all for React Router
+    @app.get("/{full_path:path}")
+    async def serve_react_app(full_path: str):
+        # API requests should have already been handled by specific routes
+        if full_path.startswith("api/") or full_path.startswith("config/") or full_path.startswith("docs") or full_path.startswith("openapi.json"):
+             return {"status": "404", "message": "API Endpoint not found"}
+        
+        # Serve index.html for everything else
+        return FileResponse(os.path.join(static_dir, "index.html"))
+else:
+    logger.warning(f"Static directory not found at {static_dir}. Frontend will not be served.")
 
 # DB Dependency
 def get_db():

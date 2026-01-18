@@ -2,6 +2,12 @@
 
 Todas las mejoras notables de "Control Red Casa Pro" se documentarán en este archivo.
 
+## [2.2.1] - 2026-01-18
+### Añadido
+- **Modo Portable**: Soporte para crear un único ejecutable (`.exe`) con PyInstaller.
+- **Servidor Estático**: El backend ahora sirve el frontend automáticamente desde `/static`.
+- **Script de Construcción**: `BUILD_EXE.bat` automatiza todo el proceso de empaquetado.
+
 ## [2.2.0] - 2026-01-17
 ### Añadido
 - **Dashboard Personalizable**: Integración de `react-grid-layout`, widgets arrastrables y guardado persistente.
