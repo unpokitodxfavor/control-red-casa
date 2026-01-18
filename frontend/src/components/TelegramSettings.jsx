@@ -51,7 +51,8 @@ const TelegramSettings = () => {
         setTesting(true);
         setMessage(null);
         try {
-            await axios.post(`${API_BASE}/config/telegram/test`);
+            // Fix: Use correct endpoint and send current config
+            await axios.post(`${API_BASE}/api/test-telegram`, config);
             setMessage({ type: 'success', text: 'Mensaje de prueba enviado con éxito' });
         } catch (error) {
             const errorMsg = error.response?.data?.message || error.response?.data?.detail || error.message || 'Error enviando mensaje';
@@ -169,6 +170,42 @@ const TelegramSettings = () => {
                     <small style={{ color: 'var(--text-secondary)', marginTop: '0.25rem', display: 'block' }}>
                         Tu ID personal o el ID del grupo/canal (busca "get my id" en Telegram)
                     </small>
+                </div>
+
+                {/* Notification Options */}
+                <div style={{ background: 'var(--background)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid var(--border-color)' }}>
+                    <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '0.875rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Tipos de Alerta
+                    </h4>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                            <input
+                                type="checkbox"
+                                checked={config.notify_new_device !== false} // Default true
+                                onChange={(e) => setConfig({ ...config, notify_new_device: e.target.checked })}
+                            />
+                            <span style={{ fontSize: '0.9rem' }}>ℹ️ Nuevos dispositivos detectados</span>
+                        </label>
+
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                            <input
+                                type="checkbox"
+                                checked={config.notify_device_offline !== false} // Default true
+                                onChange={(e) => setConfig({ ...config, notify_device_offline: e.target.checked })}
+                            />
+                            <span style={{ fontSize: '0.9rem' }}>🔴 Dispositivo desconectado (Offline)</span>
+                        </label>
+
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                            <input
+                                type="checkbox"
+                                checked={config.notify_device_online === true} // Default false
+                                onChange={(e) => setConfig({ ...config, notify_device_online: e.target.checked })}
+                            />
+                            <span style={{ fontSize: '0.9rem' }}>🟢 Dispositivo reconectado (Online)</span>
+                        </label>
+                    </div>
                 </div>
 
                 {/* Actions */}

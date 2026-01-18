@@ -1,27 +1,3 @@
-import time
-print("\n" + "="*50)
-print("@@@ CRITICAL: MAIN.PY LOADED SUCCESSFULLY @@@")
-print("@@@ HOST: 0.0.0.0 (ALL INTERFACES) @@@")
-print("="*50 + "\n")
-time.sleep(2)
-
-"""
-main_extended.py - Backend extendido con todas las funcionalidades PRTG-like.
-
-INSTRUCCIONES DE USO:
-1. Renombrar main.py actual a main_old.py (backup)
-2. Renombrar este archivo a main.py
-3. Ejecutar: pip install -r requirements.txt
-4. Iniciar: python main.py
-
-NUEVAS FUNCIONALIDADES:
-- WebSockets para tiempo real
-- Endpoints de métricas históricas
-- Gestión de sensores
-- Reglas de alertas
-- Endpoints de grupos y tags
-- Sistema de gráficos
-"""
 
 import asyncio
 import threading
@@ -38,6 +14,7 @@ import logging
 from typing import List, Optional
 from pydantic import BaseModel
 import ctypes
+import json
 
 # Importar modelos de base de datos
 from database import (
@@ -48,6 +25,10 @@ from scanner import scan_network_arp, resolve_hostname, get_vendor_from_mac
 from websocket_manager import manager as ws_manager
 from metrics_worker import MetricsCollector, auto_create_ping_sensors
 from alerts import AlertManager, AlertLevel, AlertChannel, AlertCondition
+from snmp_worker import SNMPWorker
+
+# Global SNMP Worker
+snmp_worker = None
 
 # Setup Logging
 logging.basicConfig(
@@ -127,7 +108,7 @@ def is_admin():
     except:
         return False
 
-app = FastAPI(title="Control Red Casa Pro API", version="2.1.0")
+app = FastAPI(title="Control Red Casa Pro API", version="2.2.0")
 
 # CORS
 app.add_middleware(
@@ -385,7 +366,7 @@ def background_scanner():
 
 @app.on_event("startup")
 async def startup_event():
-    global metrics_collector, alert_manager
+    global metrics_collector, alert_manager, snmp_worker
     print("\n[STARTUP] 1. Initializing Database...")
     init_db()
     print("[STARTUP] 1. DONE")
@@ -436,8 +417,23 @@ async def startup_event():
     metrics_collector = MetricsCollector()
     asyncio.create_task(metrics_collector.start())
     
+    # Init SNMP Worker (DISABLED BY USER REQUEST)
+    # try:
+    #     print("[STARTUP] 8. SNMP Worker (Auto-Detecting Gateway)...")
+    #     snmp_worker = SNMPWorker(ip="auto", community="public")
+    #     asyncio.create_task(snmp_worker.start())
+    # except Exception as e:
+    #      logger.error(f"Failed to start SNMP Worker: {e}")
+
     logger.info("🚀 Control Red Casa Pro iniciado correctamente")
     print("[STARTUP] COMPLETED!\n")
+
+@app.on_event("shutdown")
+def shutdown_event():
+    if metrics_collector:
+        metrics_collector.stop()
+    if snmp_worker:
+        snmp_worker.stop()
 
 # ============================================
 # ENDPOINTS BÁSICOS (Existentes)
@@ -450,9 +446,43 @@ def get_devices(db: Session = Depends(get_db)):
     print(f"\n[API DEBUG] Sending {count} devices to frontend")
     return db.query(Device).all()
 
-@app.get("/test_connection")
-def test_connection():
     return {"status": "ok", "message": "Backend is reachable via port 8001"}
+
+# ============================================
+# DASHBOARD CONFIGURATION
+# ============================================
+
+class DashboardLayout(BaseModel):
+    layout: List[dict]
+    visible_widgets: Optional[List[str]] = None
+
+@app.get("/config/dashboard")
+def get_dashboard_layout(db: Session = Depends(get_db)):
+    """Recupera el layout del dashboard guardado"""
+    config = db.query(Config).filter(Config.key == "dashboard_layout").first()
+    if config and config.value:
+        try:
+            return {"layout": json.loads(config.value)}
+        except:
+             return {"layout": []}
+    return {"layout": []}
+
+@app.post("/config/dashboard")
+def save_dashboard_layout(config: DashboardLayout, db: Session = Depends(get_db)):
+    """Guarda el layout del dashboard"""
+    db_config = db.query(Config).filter(Config.key == "dashboard_layout").first()
+    if not db_config:
+        db_config = Config(key="dashboard_layout", category="DASHBOARD", description="User custom layout")
+        db.add(db_config)
+    
+    # Bugfix: Save both layout AND visible_widgets
+    data_to_save = {
+        "layout": config.layout,
+        "visible_widgets": config.visible_widgets
+    }
+    db_config.value = json.dumps(data_to_save)
+    db.commit()
+    return {"status": "success"}
 
 @app.get("/alerts")
 def get_alerts(db: Session = Depends(get_db), limit: int = 50):
@@ -747,7 +777,7 @@ def scan_ports_endpoint(request: PortScanRequest, db: Session = Depends(get_db))
                         port=port_info['port'],
                         state=port_info['state'],
                         service=port_info['service'],
-                        scan_time=dt.utcnow()
+                        timestamp=dt.utcnow()
                     )
                     db.add(port_scan)
         
@@ -793,399 +823,109 @@ def get_port_scan_history(device_id: int, db: Session = Depends(get_db)):
     }
 
 # ============================================
-# ENDPOINTS DE ALERTAS
+# ENDPOINTS DE ALERTAS (EXISTENTES)
 # ============================================
 
-@app.get("/alerts")
-def get_alerts(
-    level: Optional[str] = None,
-    acknowledged: Optional[bool] = None,
-    limit: int = 100,
-    db: Session = Depends(get_db)
-):
-    """Obtiene lista de alertas"""
-    query = db.query(Alert)
-    
-    if level:
-        query = query.filter(Alert.level == level.upper())
-    
-    if acknowledged is not None:
-        query = query.filter(Alert.is_acknowledged == acknowledged)
-    
-    alerts = query.order_by(Alert.timestamp.desc()).limit(limit).all()
-    
-    return {
-        "alerts": [
-            {
-                "id": a.id,
-                "level": a.level,
-                "condition": a.condition,
-                "message": a.message,
-                "device_id": a.device_id,
-                "device_name": a.device_name,
-                "device_ip": a.device_ip,
-                "metadata": a.alert_metadata,
-                "timestamp": a.timestamp.isoformat(),
-                "is_acknowledged": a.is_acknowledged,
-                "acknowledged_by": a.acknowledged_by,
-                "acknowledged_at": a.acknowledged_at.isoformat() if a.acknowledged_at else None
-            }
-            for a in alerts
-        ],
-        "total": len(alerts)
-    }
-
-@app.get("/alerts/active")
-def get_active_alerts(
-    level: Optional[str] = None
-):
-    """Obtiene alertas activas (no reconocidas) del AlertManager"""
-    if not alert_manager:
-        return {"alerts": [], "total": 0}
-    
-    level_enum = None
-    if level:
-        try:
-            level_enum = AlertLevel(level.lower())
-        except ValueError:
-            pass
-    
-    alerts = alert_manager.get_active_alerts(level=level_enum)
-    
-    return {
-        "alerts": alerts,
-        "total": len(alerts)
-    }
-
-@app.post("/alerts/{alert_id}/acknowledge")
-def acknowledge_alert(
-    alert_id: int,
-    user: str = "system",
-    db: Session = Depends(get_db)
-):
-    """Marca una alerta como reconocida"""
-    # Actualizar en base de datos
-    alert = db.query(Alert).filter(Alert.id == alert_id).first()
-    if alert:
-        alert.is_acknowledged = True
-        alert.acknowledged_by = user
-        alert.acknowledged_at = datetime.datetime.utcnow()
-        db.commit()
-    
-    # Actualizar en AlertManager
-    if alert_manager:
-        alert_manager.acknowledge_alert(alert_id, user)
-    
-    return {"status": "success", "alert_id": alert_id}
-
-@app.get("/alerts/rules")
-def get_alert_rules(db: Session = Depends(get_db)):
-    """Obtiene lista de reglas de alertas"""
-    rules = db.query(AlertRule).all()
-    
-    return {
-        "rules": [
-            {
-                "id": r.id,
-                "name": r.name,
-                "description": r.description,
-                "enabled": r.enabled,
-                "device_id": r.device_id,
-                "condition": r.condition,
-                "level": r.level,
-                "channels": r.channels,
-                "threshold": r.threshold,
-                "throttle_minutes": r.throttle_minutes,
-                "escalate_after_minutes": r.escalate_after_minutes,
-                "last_triggered": r.last_triggered.isoformat() if r.last_triggered else None,
-                "created_at": r.created_at.isoformat()
-            }
-            for r in rules
-        ],
-        "total": len(rules)
-    }
-
-class AlertRuleCreate(BaseModel):
-    name: str
-    description: Optional[str] = None
-    enabled: bool = True
-    device_id: Optional[int] = None
-    condition: str
-    level: str = "WARNING"
-    channels: List[str] = ["in_app"]
-    threshold: Optional[float] = None
-    throttle_minutes: int = 5
-    escalate_after_minutes: Optional[int] = None
-
-@app.post("/alerts/rules")
-def create_alert_rule(rule: AlertRuleCreate, db: Session = Depends(get_db)):
-    """Crea una nueva regla de alerta"""
-    db_rule = AlertRule(
-        name=rule.name,
-        description=rule.description,
-        enabled=rule.enabled,
-        device_id=rule.device_id,
-        condition=rule.condition,
-        level=rule.level,
-        channels=rule.channels,
-        threshold=rule.threshold,
-        throttle_minutes=rule.throttle_minutes,
-        escalate_after_minutes=rule.escalate_after_minutes
-    )
-    
-    db.add(db_rule)
-    db.commit()
-    db.refresh(db_rule)
-    
-    # Recargar reglas en AlertManager
-    if alert_manager:
-        alert_manager.load_rules()
-    
-    return {"status": "success", "rule_id": db_rule.id}
-
-@app.put("/alerts/rules/{rule_id}")
-def update_alert_rule(
-    rule_id: int,
-    rule: AlertRuleCreate,
-    db: Session = Depends(get_db)
-):
-    """Actualiza una regla de alerta"""
-    db_rule = db.query(AlertRule).filter(AlertRule.id == rule_id).first()
-    
-    if not db_rule:
-        return {"status": "error", "message": "Rule not found"}
-    
-    db_rule.name = rule.name
-    db_rule.description = rule.description
-    db_rule.enabled = rule.enabled
-    db_rule.device_id = rule.device_id
-    db_rule.condition = rule.condition
-    db_rule.level = rule.level
-    db_rule.channels = rule.channels
-    db_rule.threshold = rule.threshold
-    db_rule.throttle_minutes = rule.throttle_minutes
-    db_rule.escalate_after_minutes = rule.escalate_after_minutes
-    
-    db.commit()
-    
-    # Recargar reglas en AlertManager
-    if alert_manager:
-        alert_manager.load_rules()
-    
-    return {"status": "success", "rule_id": rule_id}
-
-@app.delete("/alerts/rules/{rule_id}")
-def delete_alert_rule(rule_id: int, db: Session = Depends(get_db)):
-    """Elimina una regla de alerta"""
-    db_rule = db.query(AlertRule).filter(AlertRule.id == rule_id).first()
-    
-    if not db_rule:
-        return {"status": "error", "message": "Rule not found"}
-    
-    db.delete(db_rule)
-    db.commit()
-    
-    # Recargar reglas en AlertManager
-    if alert_manager:
-        alert_manager.load_rules()
-    
-    return {"status": "success", "rule_id": rule_id}
-
-class TestAlertRequest(BaseModel):
-    level: str = "INFO"
-    message: str = "Test alert"
-    channels: List[str] = ["in_app"]
-
-@app.post("/alerts/test")
-def test_alert(request: TestAlertRequest):
-    """Envía una alerta de prueba y la guarda en BD"""
-    if not alert_manager:
-        return {"status": "error", "message": "Alert manager not initialized"}
-        
-    db = SessionLocal()
-    try:
-        # 1. Guardar en Base de Datos (Persistencia)
-        db_alert = Alert(
-            level=request.level.upper(),
-            condition="NEW_DEVICE", # Condición genérica para tests
-            message=request.message,
-            device_name="Test Device",
-            device_ip="192.168.1.999",
-            alert_metadata={"is_test": True}
-        )
-        db.add(db_alert)
-        db.commit()
-        db.refresh(db_alert)
-        
-        # 2. Enviar Notificación (AlertManager)
-        from alerts import Alert as AlertClass
-        
-        # Convertir DB Alert a Python Alert para el manager
-        py_alert = AlertClass(
-            level=AlertLevel(request.level.lower()),
-            condition=AlertCondition.NEW_DEVICE,
-            message=request.message,
-            device_name="Test Device",
-            device_ip="192.168.1.999",
-            alert_metadata={"is_test": True}
-        )
-        py_alert.id = db_alert.id # Vincular ID
-        
-        # Enviar por canales especificados
-        channels = [AlertChannel(ch) for ch in request.channels]
-        alert_manager.send_notification(py_alert, channels)
-        
-        return {
-            "status": "success",
-            "message": "Test alert sent and saved",
-            "alert_id": db_alert.id,
-            "channels": request.channels
-        }
-    except Exception as e:
-        logger.error(f"Error sending test alert: {e}")
-        return {"status": "error", "message": str(e)}
-    finally:
-        db.close()
-
-# ============================================
-# WEBSOCKET ENDPOINT
-# ============================================
-
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    """WebSocket para actualizaciones en tiempo real"""
-    await ws_manager.connect(websocket)
-    try:
-        while True:
-            # Mantener conexión abierta y recibir mensajes
-            data = await websocket.receive_text()
-            # Echo o procesar comandos del cliente
-            await websocket.send_json({"type": "pong", "data": data})
-    except WebSocketDisconnect:
-        ws_manager.disconnect(websocket)
-        logger.info("Cliente WebSocket desconectado")
-
-# ============================================
-# INICIO DE LA APLICACIÓN
-# ============================================
-
-
-# ============================================
-# ENDPOINTS CONFIGURACIÓN TELEGRAM
-# ============================================
-
-class TelegramConfigModel(BaseModel):
-    enabled: bool
+class TelegramConfig(BaseModel):
     bot_token: str
     chat_id: str
-
-@app.get("/config/dashboard")
-def get_dashboard_layout(db: Session = Depends(get_db)):
-    layout = db.query(DashboardLayout).filter(DashboardLayout.user_id == "admin").first()
-    if not layout:
-        # Default layout
-        return {
-            "layout": [
-                {"i": "stats", "x": 0, "y": 0, "w": 12, "h": 1},
-                {"i": "devices", "x": 0, "y": 1, "w": 8, "h": 4},
-                {"i": "map", "x": 8, "y": 1, "w": 4, "h": 4}
-            ]
-        }
-    return {"layout": layout.layout}
-
-@app.post("/config/dashboard")
-def save_dashboard_layout(config: dict, db: Session = Depends(get_db)):
-    layout = db.query(DashboardLayout).filter(DashboardLayout.user_id == "admin").first()
-    if not layout:
-        layout = DashboardLayout(user_id="admin", layout=config.get("layout"))
-        db.add(layout)
-    else:
-        layout.layout = config.get("layout")
-        layout.updated_at = datetime.datetime.utcnow()
-    
-    db.commit()
-    return {"status": "success"}
+    enabled: bool
+    notify_new_device: bool = True
+    notify_device_offline: bool = True
+    notify_device_online: bool = False
 
 @app.get("/config/telegram")
 def get_telegram_config(db: Session = Depends(get_db)):
-    try:
-        tg_token = db.query(Config).filter(Config.key == 'telegram_bot_token').first()
-        tg_chat_id = db.query(Config).filter(Config.key == 'telegram_chat_id').first()
-        tg_enabled = db.query(Config).filter(Config.key == 'telegram_enabled').first()
-        
-        token = tg_token.value if tg_token else ""
-        # Mask token for security
-        if len(token) > 10:
-            masked = token[:5] + "*" * (len(token) - 10) + token[-5:]
-        else:
-            masked = token
-            
-        return {
-            "enabled": tg_enabled.value == 'true' if tg_enabled else False,
-            "bot_token": masked,
-            "chat_id": tg_chat_id.value if tg_chat_id else "",
-            "is_configured": bool(token and tg_chat_id)
-        }
-    except Exception as e:
-        logger.error(f"Error getting telegram config: {e}")
-        return {"error": str(e)}
+    tg_token = db.query(Config).filter(Config.key == "telegram_bot_token").first()
+    tg_chat_id = db.query(Config).filter(Config.key == "telegram_chat_id").first()
+    tg_enabled = db.query(Config).filter(Config.key == "telegram_enabled").first()
+    
+    # Granular flags
+    notify_new = db.query(Config).filter(Config.key == "telegram_notify_new").first()
+    notify_offline = db.query(Config).filter(Config.key == "telegram_notify_offline").first()
+    notify_online = db.query(Config).filter(Config.key == "telegram_notify_online").first()
+    
+    return {
+        "bot_token": tg_token.value if tg_token else "",
+        "chat_id": tg_chat_id.value if tg_chat_id else "",
+        "enabled": (tg_enabled.value == "true") if tg_enabled else False,
+        "notify_new_device": (notify_new.value == "true") if notify_new else True,
+        "notify_device_offline": (notify_offline.value == "true") if notify_offline else True,
+        "notify_device_online": (notify_online.value == "true") if notify_online else False
+    }
 
 @app.post("/config/telegram")
-def save_telegram_config(config: TelegramConfigModel, db: Session = Depends(get_db)):
+def save_telegram_config(config: TelegramConfig, db: Session = Depends(get_db)):
+    # Helper to save or update
+    def save_key(key, value):
+        db_conf = db.query(Config).filter(Config.key == key).first()
+        if not db_conf:
+            db_conf = Config(key=key, category="TELEGRAM", description=f"Telegram {key}")
+            db.add(db_conf)
+        db_conf.value = str(value)
+    
+    save_key("telegram_bot_token", config.bot_token)
+    save_key("telegram_chat_id", config.chat_id)
+    save_key("telegram_enabled", "true" if config.enabled else "false")
+    
+    # Save granular flags
+    save_key("telegram_notify_new", "true" if config.notify_new_device else "false")
+    save_key("telegram_notify_offline", "true" if config.notify_device_offline else "false")
+    save_key("telegram_notify_online", "true" if config.notify_device_online else "false")
+    
+    db.commit()
+    
+    # Update runtime config
+    ALERT_CONFIG['telegram']['bot_token'] = config.bot_token
+    ALERT_CONFIG['telegram']['chat_id'] = config.chat_id
+    ALERT_CONFIG['telegram']['enabled'] = config.enabled
+    
+    ALERT_CONFIG['telegram']['notify_new_device'] = config.notify_new_device
+    ALERT_CONFIG['telegram']['notify_device_offline'] = config.notify_device_offline
+    ALERT_CONFIG['telegram']['notify_device_online'] = config.notify_device_online
+    
+    # Reload alert manager if initialized
+    if alert_manager:
+        alert_manager.config = ALERT_CONFIG
+    
+    return {"status": "success"}
+
+@app.post("/api/test-telegram")
+def test_telegram_notification(config: TelegramConfig):
     try:
-        # Save enabled
-        db.merge(Config(key='telegram_enabled', value=str(config.enabled).lower(), category='NOTIFICATIONS'))
-        
-        # Save token only if provided (not masked)
-        if config.bot_token and '*' not in config.bot_token:
-            db.merge(Config(key='telegram_bot_token', value=config.bot_token, category='NOTIFICATIONS'))
-            ALERT_CONFIG['telegram']['bot_token'] = config.bot_token
-            
-        # Save chat_id
-        db.merge(Config(key='telegram_chat_id', value=config.chat_id, category='NOTIFICATIONS'))
-        
-        db.commit()
-        
-        # Update runtime config
-        ALERT_CONFIG['telegram']['enabled'] = config.enabled
-        ALERT_CONFIG['telegram']['chat_id'] = config.chat_id
-        
-        return {"status": "success", "message": "Telegram configuration saved"}
+        import requests
+        url = f"https://api.telegram.org/bot{config.bot_token}/sendMessage"
+        payload = {
+            "chat_id": config.chat_id,
+            "text": "🔔 Prueba exitosa: Control de Red Casa Pro conectado correctamente."
+        }
+        resp = requests.post(url, json=payload, timeout=5)
+        if resp.status_code == 200:
+            return {"status": "success"}
+        else:
+            return {"status": "error", "message": f"Telegram Error: {resp.text}"}
     except Exception as e:
-        db.rollback()
-        logger.error(f"Error saving telegram config: {e}")
         return {"status": "error", "message": str(e)}
 
-@app.post("/config/telegram/test")
-def test_telegram_config(db: Session = Depends(get_db)):
-    if not alert_manager:
-        return {"status": "error", "message": "AlertManager not initialized"}
-        
-    try:
-        # Check if configured
-        if not ALERT_CONFIG['telegram']['bot_token'] or not ALERT_CONFIG['telegram']['chat_id']:
-             return {"status": "error", "message": "Telegram not configured"}
-             
-        # Import Alert class locally
-        from alerts import Alert as AlertClass
-             
-        # Create test alert
-        test_alert = AlertClass(
-            level=AlertLevel.INFO,
-            condition=AlertCondition.DEVICE_ONLINE,
-            message="🔔 Test de integración Telegram: ¡Funcionando correctamente!",
-            device_name="Sistema Control-Red-Casa",
-            device_ip="127.0.0.1"
-        )
-        
-        # Force send via Telegram
-        alert_manager._send_telegram(test_alert, force=True)
-        
-        return {"status": "success", "message": "Test message sent"}
-    except Exception as e:
-        logger.error(f"Telegram test failed: {e}")
-        return {"status": "error", "message": str(e)}
+@app.post("/alerts/{alert_id}/acknowledge")
+def acknowledge_alert(alert_id: int, user: str = "admin", db: Session = Depends(get_db)):
+    alert = db.query(Alert).filter(Alert.id == alert_id).first()
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    
+    alert.is_acknowledged = True
+    alert.acknowledged_by = user
+    alert.acknowledged_at = datetime.datetime.utcnow()
+    db.commit()
+    return {"status": "success"}
+
+@app.get("/api/router/stats")
+def get_router_stats():
+    if snmp_worker:
+        return snmp_worker.metrics
+    return {"error": "SNMP Worker not running"}
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8001)
+    # Listen on all interfaces
+    uvicorn.run(app, host="0.0.0.0", port=8001)

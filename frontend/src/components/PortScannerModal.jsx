@@ -141,8 +141,14 @@ const PortScannerModal = ({ devices, onClose, onScanComplete }) => {
                     </button>
                 </div>
 
-                {!results ? (
+                {!results || results.status !== 'success' ? (
                     <>
+                        {results?.status === 'error' && (
+                            <div style={{ padding: '1rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '0.75rem', marginBottom: '2rem', color: 'var(--danger)' }}>
+                                <strong>Error:</strong> {results.message}
+                            </div>
+                        )}
+
                         {/* Selección de dispositivos */}
                         <div style={{ marginBottom: '2rem' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
@@ -314,7 +320,7 @@ const PortScannerModal = ({ devices, onClose, onScanComplete }) => {
                             </div>
                         </div>
 
-                        {Object.entries(results.results).map(([ip, ports]) => {
+                        {results.results && Object.entries(results.results).map(([ip, ports]) => {
                             const device = devices.find(d => d.ip === ip);
                             return (
                                 <div key={ip} style={{
@@ -329,7 +335,7 @@ const PortScannerModal = ({ devices, onClose, onScanComplete }) => {
                                         <code style={{ marginLeft: 'auto' }}>{ip}</code>
                                     </div>
 
-                                    {ports.length > 0 ? (
+                                    {ports && ports.length > 0 ? (
                                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.5rem' }}>
                                             {ports.map(port => (
                                                 <div key={port.port} style={{
@@ -374,7 +380,7 @@ const PortScannerModal = ({ devices, onClose, onScanComplete }) => {
                     </div>
                 )}
 
-                <style jsx>{`
+                <style>{`
           @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }

@@ -12,7 +12,7 @@ const DeviceListWidget = ({ devices = [], onNavigate }) => {
     };
 
     return (
-        <div style={{ overflow: 'auto', height: '100%' }}>
+        <div className="no-scrollbar" style={{ overflow: 'auto', height: '100%' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
                 <thead style={{ position: 'sticky', top: 0, background: 'var(--card-bg)', zIndex: 1 }}>
                     <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border-color)' }}>

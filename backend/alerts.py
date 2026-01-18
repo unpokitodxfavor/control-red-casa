@@ -329,6 +329,14 @@ class AlertManager:
         try:
             bot_token = telegram_config.get('bot_token')
             chat_id = telegram_config.get('chat_id')
+
+            # Granular checks
+            if alert.condition == AlertCondition.NEW_DEVICE and not telegram_config.get('notify_new_device', True):
+                return
+            if alert.condition == AlertCondition.DEVICE_OFFLINE and not telegram_config.get('notify_device_offline', True):
+                return
+            if alert.condition == AlertCondition.DEVICE_ONLINE and not telegram_config.get('notify_device_online', False):
+                return
             
             # Emoji según nivel
             emoji = {

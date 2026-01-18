@@ -11,7 +11,7 @@ const AlertsWidget = ({ alerts = [] }) => {
     };
 
     return (
-        <div style={{ overflow: 'auto', height: '100%', padding: '0.5rem' }}>
+        <div className="no-scrollbar" style={{ overflow: 'auto', height: '100%', padding: '0.5rem' }}>
             {recentAlerts.length === 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-secondary)', opacity: 0.7 }}>
                     <CheckCircle size={32} style={{ marginBottom: '0.5rem' }} />

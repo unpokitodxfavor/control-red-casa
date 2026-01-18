@@ -66,7 +66,7 @@ echo.
 :: Iniciar Backend
 echo [4/5] Iniciando Backend...
 cd backend
-start "Backend - Control-Red-Casa" /min cmd /c "python server.py"
+start "Backend - Control-Red-Casa" /min cmd /k "python server.py"
 cd ..
 timeout /t 3 /nobreak >nul
 echo [OK] Backend iniciado en puerto 8001
