@@ -5,7 +5,7 @@ echo   CREANDO INSTALADOR / EJECUTABLE PORTABLE
 echo ===================================================
 
 echo [paso 1/4] Instalando PyInstaller...
-pip install pyinstaller aiofiles uvicorn fastapi sqlalchemy psutil requests scapy pysnmp pyasn1 winotify jinja2 python-multipart pyinstaller
+pip install pyinstaller aiofiles uvicorn fastapi sqlalchemy psutil requests scapy pysnmp pyasn1 winotify jinja2 python-multipart pystray Pillow
 
 echo [paso 2/4] Construyendo Frontend (React)...
 cd frontend

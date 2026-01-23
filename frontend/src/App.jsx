@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import DeviceDetailView from './components/DeviceDetailView';
 import PortScannerModal from './components/PortScannerModal';
-import NetworkMap from './components/NetworkMap';
+import DeviceDetectionList from './components/DeviceDetectionList';
 import AlertsPanel from './components/AlertsPanel';
 import AlertNotification from './components/AlertNotification';
 import TelegramSettings from './components/TelegramSettings';
@@ -99,9 +99,9 @@ function App() {
         }
       }
 
-      setDevices(devRes.data);
-      setStats(statRes.data);
-      setAlerts(alertRes.data);
+      setDevices(Array.isArray(devRes.data) ? devRes.data : []);
+      setStats(statRes.data || { total: 0, online: 0, new_today: 0 });
+      setAlerts(Array.isArray(alertRes.data) ? alertRes.data : []);
     } catch (err) {
       console.error('Failed to fetch data', err);
     } finally {
@@ -364,7 +364,7 @@ function App() {
             onClick={() => setShowNetworkMap(true)}
             style={{ cursor: 'pointer' }}
           >
-            <Network size={20} /> Mapa de Red
+            <Activity size={20} /> Detección Reciente
           </div>
           <div
             className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`}
@@ -1050,9 +1050,9 @@ function App() {
           }}
         />
       )}
-      {/* Network Map */}
+      {/* Device Detection List (Replacement for Network Map) */}
       {showNetworkMap && (
-        <NetworkMap
+        <DeviceDetectionList
           devices={devices}
           onClose={() => setShowNetworkMap(false)}
         />

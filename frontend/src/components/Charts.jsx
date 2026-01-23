@@ -138,7 +138,7 @@ export const StatCard = ({ label, value, unit, trend, color = "var(--accent-colo
  * Gauge circular para métricas tipo porcentaje
  */
 export const GaugeChart = ({ value, max = 100, label, color }) => {
-    const percentage = (value / max) * 100;
+    const percentage = ((value || 0) / max) * 100;
     const rotation = (percentage / 100) * 180 - 90;
 
     const getColor = () => {
@@ -165,7 +165,7 @@ export const GaugeChart = ({ value, max = 100, label, color }) => {
                     strokeDasharray={`${(percentage / 100) * 251}, 251`}
                 />
                 <text x="100" y="90" textAnchor="middle" fill="white" fontSize="32" fontWeight="bold">
-                    {value.toFixed(1)}
+                    {(value || 0).toFixed(1)}
                 </text>
                 <text x="100" y="110" textAnchor="middle" fill="var(--text-secondary)" fontSize="14">
                     {label}

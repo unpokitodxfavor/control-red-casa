@@ -44,11 +44,24 @@ class PingSensor(BaseSensor):
             param = '-n' if platform.system().lower() == 'windows' else '-c'
             count = self.config.get('ping_count', 4)
             
+            # Prepare startupinfo to hide console window on Windows
+            startupinfo = None
+            if platform.system().lower() == 'windows':
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                startupinfo.wShowWindow = subprocess.SW_HIDE
+                # Create no window flag
+                creationflags = 0x08000000 # CREATE_NO_WINDOW
+            else:
+                creationflags = 0
+
             # Ejecutar ping asíncrono
             process = await asyncio.create_subprocess_exec(
                 'ping', param, str(count), self.device_ip,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
+                startupinfo=startupinfo,
+                creationflags=creationflags
             )
             
             try:

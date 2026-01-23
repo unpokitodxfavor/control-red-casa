@@ -167,7 +167,15 @@ if os.path.exists(static_dir):
     async def serve_root():
         return FileResponse(os.path.join(static_dir, "index.html"))
 
-
+    # Catch-all for React Router
+    @app.get("/{full_path:path}")
+    async def serve_react_app(full_path: str):
+        # API requests should have already been handled by specific routes
+        if full_path.startswith("api/") or full_path.startswith("config/") or full_path.startswith("docs") or full_path.startswith("openapi.json"):
+             return {"status": "404", "message": "API Endpoint not found"}
+        
+        # Serve index.html for everything else
+        return FileResponse(os.path.join(static_dir, "index.html"))
 else:
     logger.warning(f"Static directory not found at {static_dir}. Frontend will not be served.")
 
@@ -270,7 +278,8 @@ def background_scanner():
                         device_type=device_type,
                         status="Online",
                         first_seen=now,
-                        last_seen=now
+                        last_seen=now,
+                        detected_at=now
                     )
                     db.add(new_dev)
                     db.commit()
@@ -321,6 +330,7 @@ def background_scanner():
                     
                 else:
                     if device.status == "Offline":
+                        device.detected_at = now
                         alert_msg = f"Dispositivo ha vuelto: {device.hostname or device.ip}"
                         new_alert = Alert(
                             device_id=device.id,
@@ -422,6 +432,21 @@ async def startup_event():
     global metrics_collector, alert_manager, snmp_worker
     print("\n[STARTUP] 1. Initializing Database...")
     init_db()
+    
+    # Initialize detected_at if NULL for online devices
+    try:
+        db = SessionLocal()
+        online_devices = db.query(Device).filter(Device.status == "Online", Device.detected_at == None).all()
+        if online_devices:
+            now = datetime.datetime.utcnow()
+            for dev in online_devices:
+                dev.detected_at = now
+            db.commit()
+            logger.info(f"✅ Initialized detected_at for {len(online_devices)} devices")
+        db.close()
+    except Exception as e:
+        logger.error(f"Error initializing detected_at: {e}")
+        
     print("[STARTUP] 1. DONE")
     
     # Cargar configuración desde BD
@@ -1018,25 +1043,6 @@ def run_uvicorn():
         with open("crash_startup.txt", "w") as f:
             f.write(f"Startup Error at {datetime.datetime.now()}:\n")
             f.write(traceback.format_exc())
-
-# Catch-all for React Router - MOVED TO END TO AVOID SWALLOWING API ROUTES
-if getattr(sys, 'frozen', False):
-    base_path = sys._MEIPASS
-    static_dir = os.path.join(base_path, "static")
-else:
-    base_path = os.path.dirname(os.path.abspath(__file__))
-    static_dir = os.path.join(base_path, "static")
-
-@app.get("/{full_path:path}")
-async def serve_react_app(full_path: str):
-    # API requests should have already been handled by specific routes
-    if full_path.startswith("api/") or full_path.startswith("config/") or full_path.startswith("docs") or full_path.startswith("openapi.json"):
-            return {"status": "404", "message": "API Endpoint not found"}
-    
-    # Serve index.html for everything else
-    if os.path.exists(os.path.join(static_dir, "index.html")):
-        return FileResponse(os.path.join(static_dir, "index.html"))
-    return {"status": "404", "message": "Frontend not found"}
 
 if __name__ == "__main__":
     # 1. Start API Server in separate thread

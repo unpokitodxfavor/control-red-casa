@@ -30,6 +30,24 @@
 - 📈 **Métricas** - Latencia y estado en tiempo real.
 - 🌓 **Tema Claro/Oscuro** - Elegancia visual.
 
+
+---
+
+## 📦 Versión Portable (.EXE)
+
+Esta versión permite ejecutar el programa sin instalar Python ni Node.js.
+
+### Requisitos Previos
+- **Instalar [Npcap](https://npcap.com/)** (Necesario para el escáner de red).
+  - *Importante: Durante la instalación, marca "Install Npcap in WinPcap API-compatible Mode".*
+
+### Cómo Iniciar
+1. Navega a `backend/dist/`.
+2. Ejecuta **`ControlRedCasaPro.exe`** (Click derecho -> **Ejecutar como administrador**).
+3. Se abrirá una consola negra (Back-end) y tu navegador web (Front-end).
+
+> **Nota**: No cierres la ventana negra, es el servidor funcionando.
+
 ---
 
 ## 🚀 Instalación Rápida

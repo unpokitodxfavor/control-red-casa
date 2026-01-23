@@ -21,8 +21,8 @@ const RouterStatsWidget = () => {
 
                         const newItem = {
                             time: timeStr,
-                            in: res.data.traffic_in / 1024 / 1024, // Mbps (aprox)
-                            out: res.data.traffic_out / 1024 / 1024
+                            in: (res.data.traffic_in || 0) / 1024 / 1024, // Mbps (aprox)
+                            out: (res.data.traffic_out || 0) / 1024 / 1024
                         };
 
                         const newHistory = [...prev, newItem];
@@ -57,7 +57,7 @@ const RouterStatsWidget = () => {
                     <Cpu size={20} className="text-accent" />
                     <div>
                         <div style={{ fontSize: '0.7rem', color: 'gray' }}>CPU Load</div>
-                        <div style={{ fontWeight: 'bold' }}>{stats.cpu_load.toFixed(2)}</div>
+                        <div style={{ fontWeight: 'bold' }}>{(stats.cpu_load || 0).toFixed(2)}</div>
                     </div>
                 </div>
                 <div style={{ background: 'rgba(255,255,255,0.05)', padding: '0.5rem', borderRadius: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -71,7 +71,7 @@ const RouterStatsWidget = () => {
                     <Wifi size={20} style={{ color: '#f59e0b' }} />
                     <div>
                         <div style={{ fontSize: '0.7rem', color: 'gray' }}>Traffic (In)</div>
-                        <div style={{ fontWeight: 'bold' }}>{(stats.traffic_in / 1024 / 1024).toFixed(2)} Mbps</div>
+                        <div style={{ fontWeight: 'bold' }}>{((stats.traffic_in || 0) / 1024 / 1024).toFixed(2)} Mbps</div>
                     </div>
                 </div>
                 <div style={{ background: 'rgba(255,255,255,0.05)', padding: '0.5rem', borderRadius: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>

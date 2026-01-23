@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react';
-import io from 'socket.io-client';
 
-const SOCKET_URL = 'ws://127.0.0.1:8000/ws';
+// Dynamic WebSocket URL based on current location
+const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+const host = window.location.hostname; # e.g.localhost or 127.0.0.1
+const port = window.location.port || '8001'; # Fallback to 8001 if served statically without port in URL(rare) or dev default
+const SOCKET_URL = `${protocol}//${host}:${port}/ws`;
 
 /**
  * Hook para gestionar la conexión WebSocket

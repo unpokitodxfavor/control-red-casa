@@ -30,6 +30,8 @@ class Device(Base):
     map_x = Column(Float)
     map_y = Column(Float)
 
+    detected_at = Column(DateTime, default=datetime.datetime.utcnow)
+
     alerts = relationship("Alert", back_populates="device")
     metrics = relationship("MetricHistory", back_populates="device")
     sensors = relationship("Sensor", back_populates="device")
