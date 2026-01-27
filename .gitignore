@@ -28,3 +28,6 @@ npm-debug.log*
 # Project Specific
 innecesario/
 programa/
+backend/build/
+backend/dist/
+backend/static/assets/
